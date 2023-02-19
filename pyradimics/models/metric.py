@@ -6,19 +6,19 @@ from sklearn.metrics import accuracy_score, roc_auc_score, roc_curve, \
 from sklearn.preprocessing import label_binarize
 
 
-def FitMetric(clf, test_X, test_y, pic_name):
+def FitMetric(clf, test_X, test_y, pic_name, pic_dir = "..\pic\pic data"):
     diction = {0: 'LUNG_CANCER', 1: 'LYMPHOMA', 2: 'MELANOMA'}
     prediction = clf.predict(test_X)
-    print("measure result:\n", classification_report(test_y, prediction, digits=4))
-    print("accuracy score:", accuracy_score(test_y, prediction))
-    print("micro precision score:", precision_score(test_y, prediction, average='micro'))
-    print("micro recall score:", recall_score(test_y, prediction, average='micro'))
-    print("micro F1 score:", f1_score(test_y, prediction, average='micro'))
+    print(f"measure result:{classification_report(test_y, prediction, digits=4)}")
+    print(f"accuracy score: {np.round(accuracy_score(test_y, prediction), 4)}")
+    print(f"macro precision score: {np.round(precision_score(test_y, prediction, average='macro'), 4)}")
+    print(f"macro recall score: {np.round(recall_score(test_y, prediction, average='macro'), 4)}")
+    print(f"macro F1 score: {np.round(f1_score(test_y, prediction, average='macro'), 4)}")
 
     # roc_auc
     Y_pred_prob = clf.predict_proba(test_X)
     test_y = label_binarize(test_y, classes=[0, 1, 2])
-    print("roc_auc score", roc_auc_score(test_y, Y_pred_prob, multi_class='ovr'))
+    print(f"roc_auc score: {np.round(roc_auc_score(test_y, Y_pred_prob, multi_class='ovr'), 4)}")
 
     fpr = dict()
     tpr = dict()
@@ -56,5 +56,13 @@ def FitMetric(clf, test_X, test_y, pic_name):
     plt.ylabel('True Positive Rate')
     plt.xlabel('False Positive Rate')
     plt.grid(True)
-    plt.savefig(pic_name)
     plt.show()
+
+    for key, val in fpr.items():
+        key = diction.get(key, key)
+        with open(pic_dir+r"\fpr_"+str(key)+".txt", "a") as f:
+            f.write(pic_name+": "+str(val.tolist())+"\n")
+    for key, val in tpr.items():
+        key = diction.get(key, key)
+        with open(pic_dir+r"\tpr_"+str(key)+".txt", "a") as t:
+            t.write(pic_name+": "+str(val.tolist())+"\n")

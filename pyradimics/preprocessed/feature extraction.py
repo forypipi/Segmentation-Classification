@@ -34,19 +34,25 @@ def ReadDcms(study_no: int, root_dir=r'E:\dataset\preprocessed'):
         sex = 2
     label = clinical.loc[0, "label"]
     return pet_image, ct_image, seg_image, age, sex, label
+    # return seg_image, age, sex, label
 
-classes = pd.read_csv(r'E:\dataset\target.csv', index_col=0)
-clinical = pd.read_csv(r'E:\dataset\Clinical Metadata FDG PET_CT Lesions.csv')
+
+classes = pd.read_csv(r'E:\dataset\preprocessed\split_train_val_test.csv', index_col=0)
+clinical = pd.read_csv(r'E:\dataset\preprocessed\Clinical Metadata FDG PET_CT Lesions.csv')
 settings = dict()
 settings['binWidth'] = 25
-features = pd.read_csv("../data/features.csv", index_col=0)
-for i in range(len(os.listdir('E:\dataset\preprocessed'))):
-    if i < 847:
-        continue
+features = pd.DataFrame()
+# features = pd.read_csv("../data/features.csv", index_col=0)
+cnt = 0
+for i in range(1014):
+    # if i < 847:
+    #     continue
     print("-"*10, f"start pyradiomics for patient {i}", "-"*10)
     pet, ct, seg, age, sex, label = ReadDcms(i)
     print(label, sitk.GetArrayFromImage(seg).max())
     if sitk.GetArrayFromImage(seg).max() == 1:
+        # cnt += 1
+        # continue
         extractor = featureextractor.RadiomicsFeatureExtractor(**settings)
         extractor.enableAllFeatures()
         pet_result = extractor.computeFeatures(pet, seg, imageTypeName="original")
@@ -61,4 +67,4 @@ for i in range(len(os.listdir('E:\dataset\preprocessed'))):
         # for key, value in result.items():
         #     print('\t', key, ':', value)
         print(features.tail(10))
-        features.to_csv("../data/features.csv")
+features.to_csv("../data/features.csv")

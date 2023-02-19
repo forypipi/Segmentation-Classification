@@ -1,12 +1,12 @@
 import joblib
+import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.svm import SVC
 from sklearn.model_selection import GridSearchCV
+import metric
 
-from pyradimics.models import metric
-
-rand = 1
+rand = 3
 df = pd.read_csv("../data/preprocessed features.csv", index_col=0)
 diction = {0: 'LUNG_CANCER', 1: 'LYMPHOMA', 2: 'MELANOMA'}
 train, test = train_test_split(df, test_size=0.3, random_state=rand)
@@ -27,14 +27,14 @@ tuned_parameters = [
 grid_search = GridSearchCV(SVC(probability=True, random_state=rand, verbose=1), tuned_parameters, cv=5, n_jobs=8, scoring="accuracy")
 grid_search.fit(train_X, train_y)
 clf = grid_search.best_estimator_
-print(f'best score: {grid_search.best_score_}')
+print(f'best score: {np.round(grid_search.best_score_, 4)}')
 print(f'best parameter: {grid_search.best_params_}')
 joblib.dump(clf, "../ModelFiles/svc.m")
-metric.FitMetric(clf, test_X, test_y, "../pic/svm.png")
+metric.FitMetric(clf, test_X, test_y, "svm")
 
-# best score: 0.7241295217450211
-# best parameter: {'C': 10, 'degree': 2, 'kernel': 'poly'}
-# accuracy score: 0.7011494252873564
-# r2 score: 0.31433284457478006
-# mse score: 0.4942528735632184
-# roc_auc score 0.8727105362884654
+# best score: 0.7544
+# accuracy score: 0.7642
+# macro precision score: 0.7646
+# macro recall score: 0.756
+# macro F1 score: 0.7488
+# roc_auc score 0.9116
