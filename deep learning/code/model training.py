@@ -5,6 +5,7 @@ import torch
 from torch import nn, Tensor, optim, tensor
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
+from torchvision.ops import sigmoid_focal_loss
 import SimpleITK as sitk
 import pandas as pd
 import os
@@ -50,13 +51,14 @@ def training(model, optimizer, seg_loss, cls_loss, train_loader: DataLoader, ver
             # image: [从头向下, 从前向后, 从左向右]
             optimizer.zero_grad()
             segmentation, classification = model(images, sexs, ages)
-
             # 损失函数采用nn.CrossEntropyLoss()
             # if labels == 0:
             #     train_loss = cls_loss(classification, labels)
             # else:
 
+            seg_images = seg_images.reshape((-1, 1, 256, 256, 256))
             SegLoss = seg_loss(segmentation, seg_images)
+            # SegLoss = sigmoid_focal_loss(segmentation, seg_images, reduction='mean').to(device)
             ClsLoss = cls_loss(classification, labels)
             train_loss = alpha * SegLoss + (1 - alpha) * ClsLoss
             if verbose:
@@ -91,7 +93,9 @@ def val(model, val_loader: DataLoader, seg_loss, cls_loss):
         for data in loop:
             images, seg_images, ages, sexs, labels = data
             segmentation, classification = model(images, sexs, ages)
+            segmentation = nn.Sigmoid()(segmentation)
             seg_total_loss += seg_loss(segmentation, seg_images)
+            # seg_total_loss += sigmoid_focal_loss(segmentation, seg_images).to(device)
             cls_total_loss += cls_loss(classification, labels)
         avg_seg_loss = seg_total_loss / len(val_loader)
         avg_cls_loss = cls_total_loss / len(val_loader)
@@ -116,7 +120,9 @@ class MyData(Dataset):
         seg_path = os.path.join(patient_dir, 'seg_nii', '1.nii')
         ct_image = sitk.GetArrayFromImage(sitk.ReadImage(ct_path))
         pet_image = sitk.GetArrayFromImage(sitk.ReadImage(pet_path))
-        seg_image = Tensor(sitk.GetArrayFromImage(sitk.ReadImage(seg_path)))
+        seg_image = sitk.GetArrayFromImage(sitk.ReadImage(seg_path))
+        seg_image[seg_image==255] = 1
+        seg_image = Tensor(seg_image)
         clinical = pd.read_csv(os.path.join(patient_dir, "clinical.csv"))
         age = tensor(int(clinical.loc[0, "age"])).to(self.device)
         sex = clinical.loc[0, "sex"]
@@ -141,7 +147,6 @@ else:
     device = torch.device('cpu')
     print("running on CPU")
 
-
 start = time.time()
 root_dir = r'/data/orfu/DeepLearning/Segmentation-Classification/oufu_data_400G/preprocessed'
 classes = pd.read_csv(os.path.join(root_dir, 'split_train_val_test.csv'), index_col=0)
@@ -155,7 +160,8 @@ alpha_list = [0.5]
 weight_decay = 1e-5
 batch = 1
 ModelList = []
-seg_loss = loss.DiceLoss().to(device)
+# seg_loss = sigmoid_focal_loss().to(device)
+seg_loss = loss.WeightedFocalLoss(device=device)
 cls_loss = nn.CrossEntropyLoss().to(device)
 test_data = MyData(clinical, classes, [-1], device)
 test_dataloader = DataLoader(dataset=test_data, batch_size=batch, shuffle=True, drop_last=False)
@@ -190,8 +196,8 @@ for alpha in alpha_list:
     TrainModelPerformance.loc[0, alpha] = np.mean(trainLossList)
     ValModelPerformance.loc[0, alpha] = np.mean(ValLossList)
 
-TrainModelPerformance.to_csv("./Performance/TrainModelPerformance.csv")
-ValModelPerformance.to_csv("./Performance/ValModelPerformance.csv")
+TrainModelPerformance.to_csv("./Performance/UNet_seg&cls/TrainModelPerformance.csv")
+ValModelPerformance.to_csv("./Performance/UNet_seg&cls/ValModelPerformance.csv")
 
 # retrain for best 
 _, alpha = ValModelPerformance.stack().astype(float).idxmax()
@@ -205,7 +211,7 @@ optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)    
 model, _, trainLossList, trainSegLossList, trainClsLossList = training(model, optimizer, seg_loss, cls_loss, train_dataloader, verbose=True, alpha=alpha)
 SegLoss, ClsLoss = val(model, test_dataloader, seg_loss, cls_loss)
 torch.save(model, r'./model/UNet3D.pt')
-trainLossList.to_csv("./Performance/trainLoss.csv")
+trainLossList.to_csv("./Performance/UNet_seg&cls/trainLoss.csv")
 print("-"*20, f"\nTest total Loss: {(SegLoss+ClsLoss)/2}, Test Seg Loss: {SegLoss: 0.5f}, Test Cls Loss: {ClsLoss: 0.5f}")
 print(f"best alpha: {alpha}")
 print(f"total time: {time.time() - start: .2f}s")
