@@ -35,7 +35,7 @@ def normalized(img, range1=(0, 1)):
     img = img * (range1[1] - range1[0]) + range1[0]
     return Tensor(img)
 
-def training(model, optimizer, seg_loss, cls_loss, train_loader: DataLoader, verbose=False, EPOCHS=1, alpha=0.5):
+def training(model, optimizer, seg_loss, cls_loss, train_loader: DataLoader, verbose=False, EPOCHS=5, alpha=0.5):
     # log_steps = 1
     # global_step = 0
     # # start = time.time()
@@ -149,8 +149,9 @@ clinical = pd.read_csv(os.path.join(root_dir, 'Clinical Metadata FDG PET_CT Lesi
 if hasattr(torch.cuda, 'empty_cache'):
 	torch.cuda.empty_cache()
 lr = 1e-5
+# alpha_list = [0, 0,25, 0.5, 0.75, 1]
 alpha_list = [0.5]
-alpha_list.extend(np.arange(0, 1.1, 0.2).tolist())
+
 weight_decay = 1e-5
 batch = 1
 ModelList = []
@@ -162,6 +163,7 @@ TrainModelPerformance = pd.DataFrame(columns=alpha_list, index=[0])
 ValModelPerformance = pd.DataFrame(columns=alpha_list, index=[0])
 
 for alpha in alpha_list:
+    print(f"training alpha={alpha}")
     trainLossList, ValLossList = [], []
     for validation in range(3):
         print(f"start training on valid {validation}")
@@ -205,4 +207,6 @@ SegLoss, ClsLoss = val(model, test_dataloader, seg_loss, cls_loss)
 torch.save(model, r'./model/UNet3D.pt')
 trainLossList.to_csv("./Performance/trainLoss.csv")
 print("-"*20, f"\nTest total Loss: {(SegLoss+ClsLoss)/2}, Test Seg Loss: {SegLoss: 0.5f}, Test Cls Loss: {ClsLoss: 0.5f}")
+print(f"best alpha: {alpha}")
 print(f"total time: {time.time() - start: .2f}s")
+
