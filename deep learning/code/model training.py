@@ -149,7 +149,7 @@ clinical = pd.read_csv(os.path.join(root_dir, 'Clinical Metadata FDG PET_CT Lesi
 if hasattr(torch.cuda, 'empty_cache'):
 	torch.cuda.empty_cache()
 lr = 1e-5
-# alpha_list = [0, 0,25, 0.5, 0.75, 1]
+# alpha_list = [0,25, 0.5, 0.75]
 alpha_list = [0.5]
 
 weight_decay = 1e-5

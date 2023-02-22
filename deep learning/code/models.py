@@ -3,41 +3,49 @@ from collections import OrderedDict
 import torch
 from torch import nn
 
+
 class UNet3D(nn.Module):
     def __init__(self, channel_factor=1) -> None:
         super().__init__()
         self.channel_factor = channel_factor
-        self.level1_down = nn.Sequential()
-        self.level1_down.add_module("level1_down_conv1", self.ConvBlock(in_channels=2, out_channels=16*channel_factor))
-        # self.level1_down.add_module("level1_down_conv2", self.ConvBlock(in_channels=32, out_channels=64))
-        self.maxpool1 = nn.MaxPool3d(kernel_size=(2, 2, 2), stride=(2, 2, 2))
+        self.level1_down = nn.Sequential(
+            self.ConvBlock(in_channels=2, out_channels=16*channel_factor),
+            # self.ConvBlock(in_channels=32, out_channels=64),
+            nn.MaxPool3d(kernel_size=(2, 2, 2), stride=(2, 2, 2))
+        )
 
-        self.level1_up = nn.Sequential()
-        self.level1_up.add_module("level1_up_conv1", self.ConvBlock(in_channels=16*channel_factor+32*channel_factor, out_channels=16*channel_factor))
-        self.level1_up.add_module("level1_up_conv2", self.ConvBlock(in_channels=16*channel_factor, out_channels=16*channel_factor))
-        self.level1_up.add_module("level1_up_conv3", self.ConvBlock(in_channels=16*channel_factor, out_channels=1))
+        self.level1_up = nn.Sequential(
+            self.ConvBlock(in_channels=16*channel_factor+32*channel_factor, out_channels=16*channel_factor),
+            self.ConvBlock(in_channels=16*channel_factor, out_channels=16*channel_factor),
+            self.ConvBlock(in_channels=16*channel_factor, out_channels=1)
+        )
 
-        self.level2_down = nn.Sequential()
-        self.level2_down.add_module("level2_down_conv1", self.ConvBlock(in_channels=16*channel_factor, out_channels=16*channel_factor))
-        self.level2_down.add_module("level2_down_conv2", self.ConvBlock(in_channels=16*channel_factor, out_channels=32*channel_factor))
-        self.maxpool2 = nn.MaxPool3d(kernel_size=(2, 2, 2), stride=(2, 2, 2))
+        self.level2_down = nn.Sequential(
+            self.ConvBlock(in_channels=16*channel_factor, out_channels=16*channel_factor),
+            self.ConvBlock(in_channels=16*channel_factor, out_channels=32*channel_factor),
+            nn.MaxPool3d(kernel_size=(2, 2, 2), stride=(2, 2, 2))
+        )
 
-        self.level2_up = nn.Sequential()
-        self.level2_up.add_module("level2_up_conv1", self.ConvBlock(in_channels=32*channel_factor+64*channel_factor, out_channels=32*channel_factor))
-        self.level2_up.add_module("level2_up_conv2", self.ConvBlock(in_channels=32*channel_factor, out_channels=32*channel_factor))
+        self.level2_up = nn.Sequential(
+            self.ConvBlock(in_channels=32*channel_factor+64*channel_factor, out_channels=32*channel_factor),
+            self.ConvBlock(in_channels=32*channel_factor, out_channels=32*channel_factor)
+        )
 
-        self.level3_down = nn.Sequential()
-        self.level3_down.add_module("level3_down_conv1", self.ConvBlock(in_channels=32*channel_factor, out_channels=32*channel_factor))
-        self.level3_down.add_module("level3_down_conv2", self.ConvBlock(in_channels=32*channel_factor, out_channels=64*channel_factor))
-        self.maxpool3 = nn.MaxPool3d(kernel_size=(2, 2, 2), stride=(2, 2, 2))
+        self.level3_down = nn.Sequential(
+            self.ConvBlock(in_channels=32*channel_factor, out_channels=32*channel_factor),
+            self.ConvBlock(in_channels=32*channel_factor, out_channels=64*channel_factor),
+            nn.MaxPool3d(kernel_size=(2, 2, 2), stride=(2, 2, 2))
+        )
 
-        self.level3_up = nn.Sequential()
-        self.level3_up.add_module("level3_up_conv1", self.ConvBlock(in_channels=64*channel_factor+128*channel_factor, out_channels=64*channel_factor))
-        self.level3_up.add_module("level3_up_conv2", self.ConvBlock(in_channels=64*channel_factor, out_channels=64*channel_factor))
+        self.level3_up = nn.Sequential(
+            self.ConvBlock(in_channels=64*channel_factor+128*channel_factor, out_channels=64*channel_factor),
+            self.ConvBlock(in_channels=64*channel_factor, out_channels=64*channel_factor)
+        )
 
-        self.level4 = nn.Sequential()
-        self.level4.add_module("level4_conv1", self.ConvBlock(in_channels=64*channel_factor, out_channels=64*channel_factor))
-        self.level4.add_module("level4_conv1", self.ConvBlock(in_channels=64*channel_factor, out_channels=128*channel_factor))
+        self.level4 = nn.Sequential(
+            self.ConvBlock(in_channels=64*channel_factor, out_channels=64*channel_factor),
+            self.ConvBlock(in_channels=64*channel_factor, out_channels=128*channel_factor)
+        )
 
         self.unpool_4_3 = nn.ConvTranspose3d(in_channels=128*channel_factor, out_channels=128*channel_factor, kernel_size=(2,2,2), stride=(2,2,2))
         self.unpool_3_2 = nn.ConvTranspose3d(in_channels=64*channel_factor, out_channels=64*channel_factor, kernel_size=(2,2,2), stride=(2,2,2))
@@ -46,17 +54,15 @@ class UNet3D(nn.Module):
         self.relu = nn.ReLU()
         self.glo_avr = nn.AdaptiveAvgPool3d(1)
         # self.softmax = nn.Softmax()
-        self.linear = nn.Sequential(OrderedDict([
-            ("Linear1", nn.Linear(in_features=(128+64+32+16)*channel_factor + 1 + 3, out_features=32)),
-            ("Linear2", nn.Linear(in_features=32, out_features=4))
-        ]))
+        self.linear = nn.Sequential(
+            nn.Linear(in_features=(128+64+32+16)*channel_factor + 1 + 3, out_features=32),
+            nn.Linear(in_features=32, out_features=4)
+        )
         self.sigmoid = nn.Sigmoid()
         self.softmax = nn.Softmax(dim=1)
 
-
     def forward(self, img, sex, age):
         """
-
         :param img: image
         :param sex: sex
         :param age: age
@@ -102,65 +108,231 @@ class UNet3D(nn.Module):
         return sequence
 
 
+class UNet3D_seg(nn.Module):
+    def __init__(self, channel_factor=1) -> None:
+        super().__init__()
+        self.channel_factor = channel_factor
+        self.level1_down = nn.Sequential(
+            self.ConvBlock(in_channels=2, out_channels=16*channel_factor),
+            # self.ConvBlock(in_channels=32, out_channels=64), 
+            nn.MaxPool3d(kernel_size=(2, 2, 2), stride=(2, 2, 2))
+        )
+        
+        self.level1_up = nn.Sequential(
+            self.ConvBlock(in_channels=16*channel_factor+32*channel_factor, out_channels=16*channel_factor),
+            self.ConvBlock(in_channels=16*channel_factor, out_channels=16*channel_factor),
+            self.ConvBlock(in_channels=16*channel_factor, out_channels=1)
+        )
+
+        self.level2_down = nn.Sequential(
+            self.ConvBlock(in_channels=16*channel_factor, out_channels=16*channel_factor),
+            self.ConvBlock(in_channels=16*channel_factor, out_channels=32*channel_factor),
+            nn.MaxPool3d(kernel_size=(2, 2, 2), stride=(2, 2, 2))
+        )
+
+        self.level2_up = nn.Sequential(
+            self.ConvBlock(in_channels=32*channel_factor+64*channel_factor, out_channels=32*channel_factor),
+            self.ConvBlock(in_channels=32*channel_factor, out_channels=32*channel_factor)
+        )
+
+        self.level3_down = nn.Sequential(
+            self.ConvBlock(in_channels=32*channel_factor, out_channels=32*channel_factor),
+            self.ConvBlock(in_channels=32*channel_factor, out_channels=64*channel_factor),
+            nn.MaxPool3d(kernel_size=(2, 2, 2), stride=(2, 2, 2))
+        )
+
+        self.level3_up = nn.Sequential(
+            self.ConvBlock(in_channels=64*channel_factor+128*channel_factor, out_channels=64*channel_factor),
+            self.ConvBlock(in_channels=64*channel_factor, out_channels=64*channel_factor)
+        )
+
+        self.level4 = nn.Sequential(
+            self.ConvBlock(in_channels=64*channel_factor, out_channels=64*channel_factor),
+            self.ConvBlock(in_channels=64*channel_factor, out_channels=128*channel_factor)
+        )
+
+        self.unpool_4_3 = nn.ConvTranspose3d(in_channels=128*channel_factor, out_channels=128*channel_factor, kernel_size=(2,2,2), stride=(2,2,2))
+        self.unpool_3_2 = nn.ConvTranspose3d(in_channels=64*channel_factor, out_channels=64*channel_factor, kernel_size=(2,2,2), stride=(2,2,2))
+        self.unpool_2_1 = nn.ConvTranspose3d(in_channels=32*channel_factor, out_channels=32*channel_factor, kernel_size=(2,2,2), stride=(2,2,2))
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, img, sex, age):
+        """
+        :param img: image
+        :param sex: sex
+        :param age: age
+        :return: segmentation, classfication
+        """
+        x1_down_out = self.level1_down(img)
+        x2_down_in = self.maxpool1(x1_down_out)
+        x2_down_out = self.level2_down(x2_down_in)
+        x3_down_in = self.maxpool2(x2_down_out)
+        x3_down_out = self.level3_down(x3_down_in)
+        x4_in = self.maxpool3(x3_down_out)
+        x4_out = self.level4(x4_in)
+        x3_up_in = torch.cat((x3_down_out, self.unpool_4_3(x4_out)), dim=1)
+        x3_up_out = self.level3_up(x3_up_in)
+        x2_up_in = torch.cat((x2_down_out, self.unpool_3_2(x3_up_out)), dim=1)
+        x2_up_out = self.level2_up(x2_up_in)
+        x1_up_in = torch.cat((x1_down_out, self.unpool_2_1(x2_up_out)), dim=1)
+        segmentation = self.sigmoid(self.level1_up(x1_up_in))
+        return segmentation, None
+
+    def ConvBlock(self, in_channels, out_channels, kernel_size=(3, 3, 3), padding=(1, 1, 1)):
+        conv = nn.Conv3d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, padding=padding)
+        # bn = nn.BatchNorm3d(num_features=out_channels)
+        relu = nn.ReLU()
+        sequence = nn.Sequential()
+        sequence.add_module("Conv3D", conv)
+        # sequence.add_module("Batch Normalization", bn)
+        sequence.add_module("relu", relu)
+        return sequence
+
+
+class UNet3D_cls(nn.Module):
+    def __init__(self, channel_factor=1) -> None:
+        super().__init__()
+        self.channel_factor = channel_factor
+        self.level1_down = nn.Sequential(
+            self.ConvBlock(in_channels=2, out_channels=16*channel_factor),
+            # self.ConvBlock(in_channels=32, out_channels=64),
+            nn.MaxPool3d(kernel_size=(2, 2, 2), stride=(2, 2, 2))
+        )
+
+        self.level2_down = nn.Sequential(
+            self.ConvBlock(in_channels=16*channel_factor, out_channels=16*channel_factor),
+            self.ConvBlock(in_channels=16*channel_factor, out_channels=32*channel_factor),
+            nn.MaxPool3d(kernel_size=(2, 2, 2), stride=(2, 2, 2))
+        )
+
+        self.level3_down = nn.Sequential(
+            self.ConvBlock(in_channels=32*channel_factor, out_channels=32*channel_factor),
+            self.ConvBlock(in_channels=32*channel_factor, out_channels=64*channel_factor),
+            nn.MaxPool3d(kernel_size=(2, 2, 2), stride=(2, 2, 2))
+        )
+
+
+        self.level4 = nn.Sequential(
+            self.ConvBlock(in_channels=64*channel_factor, out_channels=64*channel_factor),
+            self.ConvBlock(in_channels=64*channel_factor, out_channels=128*channel_factor)
+        )
+
+        self.relu = nn.ReLU()
+        self.glo_avr = nn.AdaptiveAvgPool3d(1)
+        self.linear = nn.Sequential(
+            nn.Linear(in_features=(128+64+32+16)*channel_factor + 1 + 3, out_features=32),
+            nn.Linear(in_features=32, out_features=4)
+        )
+        self.softmax = nn.Softmax(dim=1)
+
+    def forward(self, img, sex, age):
+        """
+        :param img: image
+        :param sex: sex
+        :param age: age
+        :return: segmentation, classfication
+        """
+        x1_down_out = self.level1_down(img)
+        x2_down_in = self.maxpool1(x1_down_out)
+        x2_down_out = self.level2_down(x2_down_in)
+        x3_down_in = self.maxpool2(x2_down_out)
+        x3_down_out = self.level3_down(x3_down_in)
+        x4_in = self.maxpool3(x3_down_out)
+        x4_out = self.level4(x4_in)
+
+        img_feature1 = self.glo_avr(x1_down_out)
+        img_feature_level1 = torch.reshape(img_feature1, (-1, 16*self.channel_factor))
+        img_feature2 = self.glo_avr(x2_down_out)
+        img_feature_level2 = torch.reshape(img_feature2, (-1, 32*self.channel_factor))
+        img_feature3 = self.glo_avr(x3_down_out)
+        img_feature_level3 = torch.reshape(img_feature3, (-1, 64*self.channel_factor))
+        img_feature4 = self.glo_avr(x4_out)
+        img_feature_level4 = torch.reshape(img_feature4, (-1, 128*self.channel_factor))
+        sex = torch.reshape(sex, (-1, 3))
+        age = torch.reshape(age, (-1, 1))
+        classify_in = torch.cat((img_feature_level1, img_feature_level2, img_feature_level3, img_feature_level4, sex, age), dim=1)
+        classify_out = self.softmax(self.linear(classify_in))
+
+        return None, classify_out
+
+    def ConvBlock(self, in_channels, out_channels, kernel_size=(3, 3, 3), padding=(1, 1, 1)):
+        conv = nn.Conv3d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, padding=padding)
+        # bn = nn.BatchNorm3d(num_features=out_channels)
+        relu = nn.ReLU()
+        sequence = nn.Sequential()
+        sequence.add_module("Conv3D", conv)
+        # sequence.add_module("Batch Normalization", bn)
+        sequence.add_module("relu", relu)
+        return sequence
+
 class VNet(nn.Module):
     def __init__(self, channel_factor=1) -> None:
         super().__init__()
         self.channel_factor = channel_factor
-        self.level1_down = nn.Sequential()
-        self.level1_down.add_module("level1_down_conv1", self.ResBlock(in_channels=2, out_channels=16*channel_factor))
+        self.level1_down = nn.Sequential(
+            self.ResBlock(in_channels=2, out_channels=16*channel_factor)
+        )
 
-        self.level1_up = nn.Sequential()
-        self.level1_up.add_module("level1_up_conv1", self.ResBlock(in_channels=16*channel_factor+16*channel_factor, out_channels=32*channel_factor))
+        self.level1_up = nn.Sequential(
+            self.ResBlock(in_channels=16*channel_factor+16*channel_factor, out_channels=32*channel_factor)
+        )
 
         self.down_1to2 = self.DownSampling(in_channels=16*channel_factor, out_channels=32*channel_factor)
-        self.level2_down = nn.Sequential()
-        self.level2_down.add_module("level2_down_conv1", self.ResBlock(in_channels=32*channel_factor, out_channels=32*channel_factor))
-        self.level2_down.add_module("level2_down_conv2", self.ResBlock(in_channels=32*channel_factor, out_channels=32*channel_factor))
+        self.level2_down = nn.Sequential(
+            self.ResBlock(in_channels=32*channel_factor, out_channels=32*channel_factor),
+            self.ResBlock(in_channels=32*channel_factor, out_channels=32*channel_factor)
+        )
 
-        self.level2_up = nn.Sequential()
-        self.level2_up.add_module("level2_up_conv1", self.ResBlock(in_channels=32*channel_factor+32*channel_factor, out_channels=64*channel_factor))
-        self.level2_up.add_module("level2_up_conv2", self.ResBlock(in_channels=64*channel_factor, out_channels=64*channel_factor))
+        self.level2_up = nn.Sequential(
+            self.ResBlock(in_channels=32*channel_factor+32*channel_factor, out_channels=64*channel_factor),
+            self.ResBlock(in_channels=64*channel_factor, out_channels=64*channel_factor)
+        )
         self.up_2to1 = self.UpSampling(in_channels=64*channel_factor, out_channels=16*channel_factor)
 
         self.down_2to3 = self.DownSampling(in_channels=32*channel_factor, out_channels=64*channel_factor)
-        self.level3_down = nn.Sequential()
-        self.level3_down.add_module("level3_down_conv1", self.ResBlock(in_channels=64*channel_factor, out_channels=64*channel_factor))
-        self.level3_down.add_module("level3_down_conv2", self.ResBlock(in_channels=64*channel_factor, out_channels=64*channel_factor))
-        self.level3_down.add_module("level3_down_conv3", self.ResBlock(in_channels=64*channel_factor, out_channels=64*channel_factor))
+        self.level3_down = nn.Sequential(
+            self.ResBlock(in_channels=64*channel_factor, out_channels=64*channel_factor),
+            self.ResBlock(in_channels=64*channel_factor, out_channels=64*channel_factor),
+            self.ResBlock(in_channels=64*channel_factor, out_channels=64*channel_factor)
+        )
 
-        self.level3_up = nn.Sequential()
-        self.level3_up.add_module("level3_up_conv1", self.ResBlock(in_channels=64*channel_factor+64*channel_factor, out_channels=128*channel_factor))
-        self.level3_up.add_module("level3_up_conv2", self.ResBlock(in_channels=128*channel_factor, out_channels=128*channel_factor))
-        self.level3_up.add_module("level3_up_conv3", self.ResBlock(in_channels=128*channel_factor, out_channels=128*channel_factor))
+        self.level3_up = nn.Sequential(
+            self.ResBlock(in_channels=64*channel_factor+64*channel_factor, out_channels=128*channel_factor),
+            self.ResBlock(in_channels=128*channel_factor, out_channels=128*channel_factor),
+            self.ResBlock(in_channels=128*channel_factor, out_channels=128*channel_factor)
+        )
         self.up_3to2 = self.UpSampling(in_channels=128*channel_factor, out_channels=32*channel_factor)
 
         self.down_3to4 = self.DownSampling(in_channels=64*channel_factor, out_channels=128*channel_factor)
-        self.level4_down = nn.Sequential()
-        self.level4_down.add_module("level4_down_conv1", self.ResBlock(in_channels=128*channel_factor, out_channels=128*channel_factor))
-        self.level4_down.add_module("level4_down_conv2", self.ResBlock(in_channels=128*channel_factor, out_channels=128*channel_factor))
-        self.level4_down.add_module("level4_down_conv3", self.ResBlock(in_channels=128*channel_factor, out_channels=128*channel_factor))
+        self.level4_down = nn.Sequential(
+            self.ResBlock(in_channels=128*channel_factor, out_channels=128*channel_factor),
+            self.ResBlock(in_channels=128*channel_factor, out_channels=128*channel_factor),
+            self.ResBlock(in_channels=128*channel_factor, out_channels=128*channel_factor)
+        )
 
-        self.level4_up = nn.Sequential()
-        self.level4_up.add_module("level4_up_conv1", self.ResBlock(in_channels=128*channel_factor+128*channel_factor, out_channels=256*channel_factor))
-        self.level4_up.add_module("level4_up_conv2", self.ResBlock(in_channels=256*channel_factor, out_channels=256*channel_factor))
-        self.level4_up.add_module("level4_up_conv3", self.ResBlock(in_channels=256*channel_factor, out_channels=256*channel_factor))
+        self.level4_up = nn.Sequential(
+            self.ResBlock(in_channels=128*channel_factor+128*channel_factor, out_channels=256*channel_factor),
+            self.ResBlock(in_channels=256*channel_factor, out_channels=256*channel_factor),
+            self.ResBlock(in_channels=256*channel_factor, out_channels=256*channel_factor)
+        )
         self.up_4to3 = self.UpSampling(in_channels=256*channel_factor, out_channels=64*channel_factor)
 
         self.down_4to5 = self.DownSampling(in_channels=128*channel_factor, out_channels=256*channel_factor)
-        self.level5 = nn.Sequential()
-        self.level5.add_module("level5_conv1", self.ResBlock(in_channels=256*channel_factor, out_channels=256*channel_factor))
-        self.level5.add_module("level5_conv2", self.ResBlock(in_channels=256*channel_factor, out_channels=256*channel_factor))
-        self.level5.add_module("level5_conv3", self.ResBlock(in_channels=256*channel_factor, out_channels=256*channel_factor))
+        self.level5 = nn.Sequential(
+            self.ResBlock(in_channels=256*channel_factor, out_channels=256*channel_factor),
+            self.ResBlock(in_channels=256*channel_factor, out_channels=256*channel_factor),
+            self.ResBlock(in_channels=256*channel_factor, out_channels=256*channel_factor)
+        )
         self.up_5to4 = self.UpSampling(in_channels=256*channel_factor, out_channels=128*channel_factor)
 
         self.conv1kernel = self.ResBlock(in_channels=16*channel_factor+16*channel_factor, out_channels=1, kernel_size=(1,1,1), padding=(0,0,0))
         self.prelu = nn.PReLU()
         self.glo_avr = nn.AdaptiveAvgPool3d(1)
         # self.softmax = nn.Softmax()
-        self.linear = nn.Sequential(OrderedDict([
-            ("Linear1", nn.Linear(in_features=256*channel_factor + 1 + 3, out_features=32)),
-            ("Linear2", nn.Linear(in_features=32, out_features=4))
-        ]))
+        self.linear = nn.Sequential(
+            nn.Linear(in_features=256*channel_factor + 1 + 3, out_features=32),
+            nn.Linear(in_features=32, out_features=4)
+        )
         self.sigmoid = nn.Sigmoid()
         self.softmax = nn.Softmax(dim=1)
 
@@ -337,7 +509,7 @@ class AttentionUNet3D(nn.Module):
         level1_Conv_out = self.Up_conv1(level1_Conv_in)
 
         seg = self.seg(level1_Conv_out)
-        
+
         return out
 
     def ConvBlock(self, in_channels, out_channels, kernel_size=(3, 3, 3), padding=(1, 1, 1)):
