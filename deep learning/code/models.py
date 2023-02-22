@@ -937,4 +937,3 @@ class AttentionUNet3D_cls(nn.Module):
         sequence.add_module("DownConv3D", conv)
         sequence.add_module("relu", relu)
         return sequence
-
