@@ -125,13 +125,13 @@ class TverskyLoss(nn.Module):
 class WeightedFocalLoss(nn.Module):
     "Non weighted version of Focal Loss"    
     def __init__(self, alpha=.25, gamma=2, device='GPU'):
-            super(WeightedFocalLoss, self).__init__()        
-            self.alpha = torch.tensor([alpha, 1-alpha]).to(device)   
-            self.gamma = gamma
+        super(WeightedFocalLoss, self).__init__()        
+        self.alpha = torch.tensor([alpha, 1-alpha]).to(device)   
+        self.gamma = gamma
             
     def forward(self, inputs, targets):
-            BCE_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction='none').data.view(-1)
-            targets = targets.type(torch.long)
-            at = self.alpha.gather(0, targets.data.view(-1))    
-            F_loss = at*(1-torch.exp(-BCE_loss))**self.gamma * BCE_loss
-            return F_loss.mean()
+        BCE_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction='none').data.view(-1)
+        targets = targets.type(torch.long)
+        at = self.alpha.gather(0, targets.data.view(-1))    
+        F_loss = at*(1-torch.exp(-BCE_loss))**self.gamma * BCE_loss
+        return F_loss.mean()

@@ -1,5 +1,3 @@
-from collections import OrderedDict
-
 import torch
 from torch import nn
 
@@ -8,7 +6,7 @@ class UNet3D(nn.Module):
     def __init__(self, channel_factor=1) -> None:
         super().__init__()
         n = 16 * channel_factor
-        self.channels = (n, n*2, n*4, n*8)
+        self.channels = (n, n * 2, n * 4, n * 8)
         self.channel_factor = channel_factor
         self.level1_down = nn.Sequential(
             self.ConvBlock(in_channels=2, out_channels=self.channels[0]),
@@ -16,7 +14,7 @@ class UNet3D(nn.Module):
         )
 
         self.level1_up = nn.Sequential(
-            self.ConvBlock(in_channels=self.channels[0]+self.channels[1], out_channels=self.channels[0]),
+            self.ConvBlock(in_channels=self.channels[0] + self.channels[1], out_channels=self.channels[0]),
             self.ConvBlock(in_channels=self.channels[0], out_channels=self.channels[0]),
             self.ConvBlock(in_channels=self.channels[0], out_channels=1)
         )
@@ -27,7 +25,7 @@ class UNet3D(nn.Module):
         )
 
         self.level2_up = nn.Sequential(
-            self.ConvBlock(in_channels=self.channels[1]+self.channels[2], out_channels=self.channels[1]),
+            self.ConvBlock(in_channels=self.channels[1] + self.channels[2], out_channels=self.channels[1]),
             self.ConvBlock(in_channels=self.channels[1], out_channels=self.channels[1])
         )
 
@@ -37,7 +35,7 @@ class UNet3D(nn.Module):
         )
 
         self.level3_up = nn.Sequential(
-            self.ConvBlock(in_channels=self.channels[2]+self.channels[3], out_channels=self.channels[2]),
+            self.ConvBlock(in_channels=self.channels[2] + self.channels[3], out_channels=self.channels[2]),
             self.ConvBlock(in_channels=self.channels[2], out_channels=self.channels[2])
         )
 
@@ -46,19 +44,22 @@ class UNet3D(nn.Module):
             self.ConvBlock(in_channels=self.channels[2], out_channels=self.channels[3])
         )
 
-        self.maxpool1 = nn.MaxPool3d(kernel_size=(2, 2, 2), stride=(2, 2, 2))
-        self.maxpool2 = nn.MaxPool3d(kernel_size=(2, 2, 2), stride=(2, 2, 2))
-        self.maxpool3 = nn.MaxPool3d(kernel_size=(2, 2, 2), stride=(2, 2, 2))
+        self.maxpool1 = nn.MaxPool3d(kernel_size=(4, 4, 4), stride=(4, 4, 4))
+        self.maxpool2 = nn.MaxPool3d(kernel_size=(4, 4, 4), stride=(4, 4, 4))
+        self.maxpool3 = nn.MaxPool3d(kernel_size=(4, 4, 4), stride=(4, 4, 4))
 
-
-        self.unpool_4_3 = nn.ConvTranspose3d(in_channels=self.channels[3], out_channels=self.channels[3], kernel_size=(2,2,2), stride=(2,2,2))
-        self.unpool_3_2 = nn.ConvTranspose3d(in_channels=self.channels[2], out_channels=self.channels[2], kernel_size=(2,2,2), stride=(2,2,2))
-        self.unpool_2_1 = nn.ConvTranspose3d(in_channels=self.channels[1], out_channels=self.channels[1], kernel_size=(2,2,2), stride=(2,2,2))
+        self.unpool_4_3 = nn.ConvTranspose3d(in_channels=self.channels[3], out_channels=self.channels[3],
+                                             kernel_size=(4, 4, 4), stride=(4, 4, 4))
+        self.unpool_3_2 = nn.ConvTranspose3d(in_channels=self.channels[2], out_channels=self.channels[2],
+                                             kernel_size=(4, 4, 4), stride=(4, 4, 4))
+        self.unpool_2_1 = nn.ConvTranspose3d(in_channels=self.channels[1], out_channels=self.channels[1],
+                                             kernel_size=(4, 4, 4), stride=(4, 4, 4))
 
         self.relu = nn.ReLU()
         self.glo_avr = nn.AdaptiveAvgPool3d(1)
         self.linear = nn.Sequential(
-            nn.Linear(in_features=(self.channels[3]+self.channels[2]+self.channels[1]+self.channels[0]) + 1 + 3, out_features=32),
+            nn.Linear(in_features=(self.channels[3] + self.channels[2] + self.channels[1] + self.channels[0]) + 1 + 3,
+                      out_features=32),
             nn.Linear(in_features=32, out_features=4)
         )
         self.sigmoid = nn.Sigmoid()
@@ -96,7 +97,8 @@ class UNet3D(nn.Module):
         img_feature_level4 = torch.reshape(img_feature4, (-1, self.channels[3]))
         sex = torch.reshape(sex, (-1, 3))
         age = torch.reshape(age, (-1, 1))
-        classify_in = torch.cat((img_feature_level1, img_feature_level2, img_feature_level3, img_feature_level4, sex, age), dim=1)
+        classify_in = torch.cat(
+            (img_feature_level1, img_feature_level2, img_feature_level3, img_feature_level4, sex, age), dim=1)
         classify_out = self.linear(classify_in)
 
         return segmentation, classify_out
@@ -111,19 +113,20 @@ class UNet3D(nn.Module):
         sequence.add_module("relu", relu)
         return sequence
 
+
 class UNet3D_seg(nn.Module):
     def __init__(self, channel_factor=1) -> None:
         super().__init__()
         n = 16 * channel_factor
-        self.channels = (n, n*2, n*4, n*8)
+        self.channels = (n, n * 2, n * 4, n * 8)
         self.channel_factor = channel_factor
         self.level1_down = nn.Sequential(
             self.ConvBlock(in_channels=2, out_channels=self.channels[0]),
-            # self.ConvBlock(in_channels=self.channels[1], out_channels=self.channels[2]), 
+            # self.ConvBlock(in_channels=self.channels[1], out_channels=self.channels[2]),
         )
-        
+
         self.level1_up = nn.Sequential(
-            self.ConvBlock(in_channels=self.channels[0]+self.channels[1], out_channels=self.channels[0]),
+            self.ConvBlock(in_channels=self.channels[0] + self.channels[1], out_channels=self.channels[0]),
             self.ConvBlock(in_channels=self.channels[0], out_channels=self.channels[0]),
             self.ConvBlock(in_channels=self.channels[0], out_channels=1)
         )
@@ -134,7 +137,7 @@ class UNet3D_seg(nn.Module):
         )
 
         self.level2_up = nn.Sequential(
-            self.ConvBlock(in_channels=self.channels[1]+self.channels[2], out_channels=self.channels[1]),
+            self.ConvBlock(in_channels=self.channels[1] + self.channels[2], out_channels=self.channels[1]),
             self.ConvBlock(in_channels=self.channels[1], out_channels=self.channels[1])
         )
 
@@ -144,7 +147,7 @@ class UNet3D_seg(nn.Module):
         )
 
         self.level3_up = nn.Sequential(
-            self.ConvBlock(in_channels=self.channels[2]+self.channels[3], out_channels=self.channels[2]),
+            self.ConvBlock(in_channels=self.channels[2] + self.channels[3], out_channels=self.channels[2]),
             self.ConvBlock(in_channels=self.channels[2], out_channels=self.channels[2])
         )
 
@@ -156,10 +159,13 @@ class UNet3D_seg(nn.Module):
         self.maxpool1 = nn.MaxPool3d(kernel_size=(2, 2, 2), stride=(2, 2, 2))
         self.maxpool2 = nn.MaxPool3d(kernel_size=(2, 2, 2), stride=(2, 2, 2))
         self.maxpool3 = nn.MaxPool3d(kernel_size=(2, 2, 2), stride=(2, 2, 2))
-        
-        self.unpool_4_3 = nn.ConvTranspose3d(in_channels=self.channels[3], out_channels=self.channels[3], kernel_size=(2,2,2), stride=(2,2,2))
-        self.unpool_3_2 = nn.ConvTranspose3d(in_channels=self.channels[2], out_channels=self.channels[2], kernel_size=(2,2,2), stride=(2,2,2))
-        self.unpool_2_1 = nn.ConvTranspose3d(in_channels=self.channels[1], out_channels=self.channels[1], kernel_size=(2,2,2), stride=(2,2,2))
+
+        self.unpool_4_3 = nn.ConvTranspose3d(in_channels=self.channels[3], out_channels=self.channels[3],
+                                             kernel_size=(2, 2, 2), stride=(2, 2, 2))
+        self.unpool_3_2 = nn.ConvTranspose3d(in_channels=self.channels[2], out_channels=self.channels[2],
+                                             kernel_size=(2, 2, 2), stride=(2, 2, 2))
+        self.unpool_2_1 = nn.ConvTranspose3d(in_channels=self.channels[1], out_channels=self.channels[1],
+                                             kernel_size=(2, 2, 2), stride=(2, 2, 2))
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, img, sex, age):
@@ -194,11 +200,12 @@ class UNet3D_seg(nn.Module):
         sequence.add_module("relu", relu)
         return sequence
 
+
 class UNet3D_cls(nn.Module):
     def __init__(self, channel_factor=1) -> None:
         super().__init__()
         n = 16 * channel_factor
-        self.channels = (n, n*2, n*4, n*8)
+        self.channels = (n, n * 2, n * 4, n * 8)
         self.channel_factor = channel_factor
         self.level1_down = nn.Sequential(
             self.ConvBlock(in_channels=2, out_channels=self.channels[0]),
@@ -215,7 +222,6 @@ class UNet3D_cls(nn.Module):
             self.ConvBlock(in_channels=self.channels[1], out_channels=self.channels[2]),
         )
 
-
         self.level4 = nn.Sequential(
             self.ConvBlock(in_channels=self.channels[2], out_channels=self.channels[2]),
             self.ConvBlock(in_channels=self.channels[2], out_channels=self.channels[3])
@@ -228,7 +234,8 @@ class UNet3D_cls(nn.Module):
         self.relu = nn.ReLU()
         self.glo_avr = nn.AdaptiveAvgPool3d(1)
         self.linear = nn.Sequential(
-            nn.Linear(in_features=(self.channels[3]+self.channels[2]+self.channels[1]+self.channels[0]) + 1 + 3, out_features=self.channels[1]),
+            nn.Linear(in_features=(self.channels[3] + self.channels[2] + self.channels[1] + self.channels[0]) + 1 + 3,
+                      out_features=self.channels[1]),
             nn.Linear(in_features=self.channels[1], out_features=4)
         )
         self.softmax = nn.Softmax(dim=1)
@@ -258,7 +265,8 @@ class UNet3D_cls(nn.Module):
         img_feature_level4 = torch.reshape(img_feature4, (-1, self.channels[3]))
         sex = torch.reshape(sex, (-1, 3))
         age = torch.reshape(age, (-1, 1))
-        classify_in = torch.cat((img_feature_level1, img_feature_level2, img_feature_level3, img_feature_level4, sex, age), dim=1)
+        classify_in = torch.cat(
+            (img_feature_level1, img_feature_level2, img_feature_level3, img_feature_level4, sex, age), dim=1)
         classify_out = self.softmax(self.linear(classify_in))
 
         return None, classify_out
@@ -273,17 +281,18 @@ class UNet3D_cls(nn.Module):
         sequence.add_module("relu", relu)
         return sequence
 
+
 class VNet(nn.Module):
     def __init__(self, channel_factor=1) -> None:
         super().__init__()
         n = 16 * channel_factor
-        self.channels = (n, n*2, n*4, n*8, n*16)
+        self.channels = (n, n * 2, n * 4, n * 8, n * 16)
         self.level1_down = nn.Sequential(
             self.ResBlock(in_channels=2, out_channels=self.channels[0])
         )
 
         self.level1_up = nn.Sequential(
-            self.ResBlock(in_channels=self.channels[0]+self.channels[0], out_channels=self.channels[1])
+            self.ResBlock(in_channels=self.channels[0] + self.channels[0], out_channels=self.channels[1])
         )
 
         self.down_1to2 = self.DownSampling(in_channels=self.channels[0], out_channels=self.channels[1])
@@ -293,7 +302,7 @@ class VNet(nn.Module):
         )
 
         self.level2_up = nn.Sequential(
-            self.ResBlock(in_channels=self.channels[1]+self.channels[1], out_channels=self.channels[2]),
+            self.ResBlock(in_channels=self.channels[1] + self.channels[1], out_channels=self.channels[2]),
             self.ResBlock(in_channels=self.channels[2], out_channels=self.channels[2])
         )
         self.up_2to1 = self.UpSampling(in_channels=self.channels[2], out_channels=self.channels[0])
@@ -306,7 +315,7 @@ class VNet(nn.Module):
         )
 
         self.level3_up = nn.Sequential(
-            self.ResBlock(in_channels=self.channels[2]+self.channels[2], out_channels=self.channels[3]),
+            self.ResBlock(in_channels=self.channels[2] + self.channels[2], out_channels=self.channels[3]),
             self.ResBlock(in_channels=self.channels[3], out_channels=self.channels[3]),
             self.ResBlock(in_channels=self.channels[3], out_channels=self.channels[3])
         )
@@ -320,7 +329,7 @@ class VNet(nn.Module):
         )
 
         self.level4_up = nn.Sequential(
-            self.ResBlock(in_channels=self.channels[3]+self.channels[3], out_channels=self.channels[4]),
+            self.ResBlock(in_channels=self.channels[3] + self.channels[3], out_channels=self.channels[4]),
             self.ResBlock(in_channels=self.channels[4], out_channels=self.channels[4]),
             self.ResBlock(in_channels=self.channels[4], out_channels=self.channels[4])
         )
@@ -334,17 +343,18 @@ class VNet(nn.Module):
         )
         self.up_5to4 = self.UpSampling(in_channels=self.channels[4], out_channels=self.channels[3])
 
-        self.conv1kernel = self.ResBlock(in_channels=self.channels[0]+self.channels[0], out_channels=1, kernel_size=(1,1,1), padding=(0,0,0))
+        self.conv1kernel = self.ResBlock(in_channels=self.channels[0] + self.channels[0], out_channels=1,
+                                         kernel_size=(1, 1, 1), padding=(0, 0, 0))
         self.prelu = nn.PReLU()
         self.glo_avr = nn.AdaptiveAvgPool3d(1)
         # self.softmax = nn.Softmax()
         self.linear = nn.Sequential(
-            nn.Linear(in_features=(self.channels[0]+self.channels[1]+self.channels[2]+self.channels[3]+self.channels[4]) + 1 + 3, out_features=32),
+            nn.Linear(in_features=(self.channels[0] + self.channels[1] + self.channels[2] + self.channels[3] +
+                                   self.channels[4]) + 1 + 3, out_features=32),
             nn.Linear(in_features=32, out_features=4)
         )
         self.sigmoid = nn.Sigmoid()
         self.softmax = nn.Softmax(dim=1)
-
 
     def forward(self, img, sex, age):
         """
@@ -395,7 +405,7 @@ class VNet(nn.Module):
         sequence.add_module("prelu", prelu)
         return sequence
 
-    def DownSampling(self, in_channels, out_channels, kernel_size=(2,2,2), stride=(2,2,2)):
+    def DownSampling(self, in_channels, out_channels, kernel_size=(2, 2, 2), stride=(2, 2, 2)):
         conv = nn.Conv3d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, stride=stride)
         prelu = nn.PReLU()
         sequence = nn.Sequential()
@@ -403,25 +413,27 @@ class VNet(nn.Module):
         sequence.add_module("prelu", prelu)
         return sequence
 
-    def UpSampling(self, in_channels, out_channels, kernel_size=(2,2,2), stride=(2,2,2)):
-        conv = nn.ConvTranspose3d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, stride=stride)
+    def UpSampling(self, in_channels, out_channels, kernel_size=(2, 2, 2), stride=(2, 2, 2)):
+        conv = nn.ConvTranspose3d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size,
+                                  stride=stride)
         prelu = nn.PReLU()
         sequence = nn.Sequential()
         sequence.add_module("DeConv3D", conv)
         sequence.add_module("prelu", prelu)
         return sequence
 
+
 class VNet_seg(nn.Module):
     def __init__(self, channel_factor=1) -> None:
         super().__init__()
         n = 16 * channel_factor
-        self.channels = (n, n*2, n*4, n*8, n*16)
+        self.channels = (n, n * 2, n * 4, n * 8, n * 16)
         self.level1_down = nn.Sequential(
             self.ResBlock(in_channels=2, out_channels=self.channels[0])
         )
 
         self.level1_up = nn.Sequential(
-            self.ResBlock(in_channels=self.channels[0]+self.channels[0], out_channels=self.channels[1])
+            self.ResBlock(in_channels=self.channels[0] + self.channels[0], out_channels=self.channels[1])
         )
 
         self.down_1to2 = self.DownSampling(in_channels=self.channels[0], out_channels=self.channels[1])
@@ -431,7 +443,7 @@ class VNet_seg(nn.Module):
         )
 
         self.level2_up = nn.Sequential(
-            self.ResBlock(in_channels=self.channels[1]+self.channels[1], out_channels=self.channels[2]),
+            self.ResBlock(in_channels=self.channels[1] + self.channels[1], out_channels=self.channels[2]),
             self.ResBlock(in_channels=self.channels[2], out_channels=self.channels[2])
         )
         self.up_2to1 = self.UpSampling(in_channels=self.channels[2], out_channels=self.channels[0])
@@ -444,7 +456,7 @@ class VNet_seg(nn.Module):
         )
 
         self.level3_up = nn.Sequential(
-            self.ResBlock(in_channels=self.channels[2]+self.channels[2], out_channels=self.channels[3]),
+            self.ResBlock(in_channels=self.channels[2] + self.channels[2], out_channels=self.channels[3]),
             self.ResBlock(in_channels=self.channels[3], out_channels=self.channels[3]),
             self.ResBlock(in_channels=self.channels[3], out_channels=self.channels[3])
         )
@@ -458,7 +470,7 @@ class VNet_seg(nn.Module):
         )
 
         self.level4_up = nn.Sequential(
-            self.ResBlock(in_channels=self.channels[3]+self.channels[3], out_channels=self.channels[4]),
+            self.ResBlock(in_channels=self.channels[3] + self.channels[3], out_channels=self.channels[4]),
             self.ResBlock(in_channels=self.channels[4], out_channels=self.channels[4]),
             self.ResBlock(in_channels=self.channels[4], out_channels=self.channels[4])
         )
@@ -472,9 +484,9 @@ class VNet_seg(nn.Module):
         )
         self.up_5to4 = self.UpSampling(in_channels=self.channels[4], out_channels=self.channels[3])
 
-        self.conv1kernel = self.ResBlock(in_channels=self.channels[0]+self.channels[0], out_channels=1, kernel_size=(1,1,1), padding=(0,0,0))
+        self.conv1kernel = self.ResBlock(in_channels=self.channels[0] + self.channels[0], out_channels=1,
+                                         kernel_size=(1, 1, 1), padding=(0, 0, 0))
         self.sigmoid = nn.Sigmoid()
-
 
     def forward(self, img, sex, age):
         """
@@ -503,12 +515,13 @@ class VNet_seg(nn.Module):
         segmentation = self.sigmoid(self.conv1kernel(x1_up_in + self.level1_up(x1_up_in)))
         return segmentation, None
 
+
 class VNet_cls(nn.Module):
     def __init__(self, channel_factor=1) -> None:
         super().__init__()
 
         n = 16 * channel_factor
-        self.channels = (n, n*2, n*4, n*8, n*16)
+        self.channels = (n, n * 2, n * 4, n * 8, n * 16)
 
         self.channel_factor = channel_factor
         self.level1_down = nn.Sequential(
@@ -546,12 +559,12 @@ class VNet_cls(nn.Module):
         self.glo_avr = nn.AdaptiveAvgPool3d(1)
         # self.softmax = nn.Softmax()
         self.linear = nn.Sequential(
-            nn.Linear(in_features=(self.channels[0]+self.channels[1]+self.channels[2]+self.channels[3]+self.channels[4]) + 1 + 3, out_features=32),
+            nn.Linear(in_features=(self.channels[0] + self.channels[1] + self.channels[2] + self.channels[3] +
+                                   self.channels[4]) + 1 + 3, out_features=32),
             nn.Linear(in_features=32, out_features=4)
         )
         self.sigmoid = nn.Sigmoid()
         self.softmax = nn.Softmax(dim=1)
-
 
     def forward(self, img, sex, age):
         """
@@ -584,6 +597,7 @@ class VNet_cls(nn.Module):
 
         return None, classify_out
 
+
 class AttentionUNetblock(nn.Module):
     def __init__(self, F_g, F_l, F_int):
         super(AttentionUNetblock, self).__init__()
@@ -613,6 +627,7 @@ class AttentionUNetblock(nn.Module):
         psi = self.psi(psi)
         out = x * psi
         return out
+
 
 class AttentionUNet3D(nn.Module):
     def __init__(self, img_channel=2, output_channel=1):
@@ -647,15 +662,15 @@ class AttentionUNet3D(nn.Module):
 
         self.level4_Up = self.UpSampling(channels[3], channels[2])
         self.Att3 = AttentionUNetblock(F_g=channels[2], F_l=channels[2], F_int=channels[2])
-        self.Up_conv3 = self.ConvBlock(2*channels[2], channels[1])
+        self.Up_conv3 = self.ConvBlock(2 * channels[2], channels[1])
 
         self.level3_Up = self.UpSampling(channels[2], channels[1])
         self.Att2 = AttentionUNetblock(F_g=channels[1], F_l=channels[1], F_int=channels[1])
-        self.Up_conv2 = self.ConvBlock(2*channels[1], channels[0])
+        self.Up_conv2 = self.ConvBlock(2 * channels[1], channels[0])
 
         self.level2_Up = self.UpSampling(channels[1], channels[0])
         self.Att1 = AttentionUNetblock(F_g=channels[0], F_l=channels[0], F_int=channels[0])
-        self.Up_conv1 = self.ConvBlock(2*channels[0], output_channel, kernel_size=(1, 1, 1), padding=(0, 0, 0))
+        self.Up_conv1 = self.ConvBlock(2 * channels[0], output_channel, kernel_size=(1, 1, 1), padding=(0, 0, 0))
 
         self.seg = torch.nn.Sigmoid()
 
@@ -706,7 +721,7 @@ class AttentionUNet3D(nn.Module):
         sequence.add_module("relu", relu)
         return sequence
 
-    def DownSampling(self, in_channels, out_channels, kernel_size=(2,2,2), stride=(2,2,2)):
+    def DownSampling(self, in_channels, out_channels, kernel_size=(2, 2, 2), stride=(2, 2, 2)):
         conv = nn.Conv3d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, stride=stride)
         relu = nn.PReLU()
         sequence = nn.Sequential()
@@ -714,8 +729,9 @@ class AttentionUNet3D(nn.Module):
         sequence.add_module("relu", relu)
         return sequence
 
-    def UpSampling(self, in_channels, out_channels, kernel_size=(2,2,2), stride=(2,2,2)):
-        conv = nn.ConvTranspose3d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, stride=stride)
+    def UpSampling(self, in_channels, out_channels, kernel_size=(2, 2, 2), stride=(2, 2, 2)):
+        conv = nn.ConvTranspose3d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size,
+                                  stride=stride)
         relu = nn.ReLU()
         sequence = nn.Sequential()
         sequence.add_module("DownConv3D", conv)
