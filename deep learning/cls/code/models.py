@@ -34,7 +34,7 @@ class UNet(nn.Module):
         self.relu = nn.ReLU()
         self.glo_avr = nn.AdaptiveAvgPool3d(1)
         self.linear = nn.Sequential(
-            nn.Linear(in_features=self.channels[3]*2*2*2 + 1 + 3,
+            nn.Linear(in_features=self.channels[3]*2*2*2 + 1 + 3,   # 2 for 128, 4 for 256
                       out_features=128),
             nn.ReLU(),
             nn.Linear(in_features=128, out_features=4)
@@ -55,7 +55,6 @@ class UNet(nn.Module):
         x3_down_out = self.level3_down(x3_down_in)
         x4_in = self.maxpool3(x3_down_out)
         x4_out = self.level4(x4_in)
-
         img_feature4 = x4_out.view(x4_out.size(0), -1)
         sex = torch.reshape(sex, (-1, 3))
         age = torch.reshape(age, (-1, 1))
@@ -116,7 +115,7 @@ class VNet(nn.Module):
         self.relu = nn.ReLU()
         # self.softmax = nn.Softmax()
         self.linear = nn.Sequential(
-            nn.Linear(in_features= self.channels[3]*2*2*2 + 1 + 3, out_features=128),
+            nn.Linear(in_features= self.channels[3]*2*2*2 + 1 + 3, out_features=128),   # 2 for 128, 4 for 256
             nn.LeakyReLU(),
             nn.Linear(in_features=128, out_features=4)
         )

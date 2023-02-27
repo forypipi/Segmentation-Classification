@@ -35,7 +35,7 @@ def normalized(img, range1=(0, 1)):
     img = img * (range1[1] - range1[0]) + range1[0]
     return Tensor(img)
 
-def training(model, optimizer, cls_loss, train_loader: DataLoader, writer, verbose=False, EPOCHS=50):
+def training(model, optimizer, cls_loss, train_loader: DataLoader, writer, verbose=False, EPOCHS=75):
     step = 0
     avg_train_loss = 0
     if verbose:
@@ -136,12 +136,13 @@ else:
 
 
 start = time.time()
-root_dir = r'/data/orfu/DeepLearning/Segmentation-Classification/oufu_data_400G/preprocessed'
+# root_dir = r'/data/orfu/DeepLearning/Segmentation-Classification/oufu_data_400G/preprocessed'
+root_dir = r'/data/zhxie/oufu_data_400G/preprocessed'
 # root_dir = r'E:\dataset\preprocessed'
 classes = pd.read_csv(os.path.join(root_dir, 'split_train_val_test.csv'), index_col=0)
 clinical = pd.read_csv(os.path.join(root_dir, 'Clinical Metadata FDG PET_CT Lesions.csv'))
 
-writer = SummaryWriter('./cls/log/UNet')
+writer = SummaryWriter('./cls/log/VNet')
 lr = 1e-5
 
 weight_decay = 1e-5
@@ -179,21 +180,21 @@ trainLossList, ValLossList = [], []
 # loss_df.to_csv("./cls/Performance/UNet/search loss.csv")
 
 # retrain for best
-train_data = MyData(clinical, classes, list(range(10)), device=device)
+train_data = MyData(clinical, classes, list(range(10)), device=device, root_dir=root_dir)
 train_dataloader = DataLoader(dataset=train_data, batch_size=batch, shuffle=True, drop_last=False)
 
 # model = models.UNet().to(device)
-model = models.UNet().to(device)
+model = models.VNet().to(device)
 optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)    # L2 loss
 
 model, _, trainLossList = training(model, optimizer, cls_loss, train_dataloader, verbose=True, writer=writer)
 
-# model = torch.load("./cls/model/UNet.pt")
+# model = torch.load("./cls/model/VNet.pt")
 testLoss, result = val(model, test_dataloader, cls_loss, writer=writer)
 
-torch.save(model, r'./cls/model/UNet.pt')
-trainLossList.to_csv("./cls/Performance/UNet/trainLoss.csv")
-result.to_csv("./cls/data/output/UNet/result.csv")
+torch.save(model, r'./cls/model/VNet.pt')
+trainLossList.to_csv("./cls/Performance/VNet/trainLoss.csv")
+result.to_csv("./cls/data/output/VNet/result.csv")
 print("-"*20, f"\nTest total Loss: {testLoss}")
 # writer.close()
 print(f"total time: {time.time() - start: .2f}s")

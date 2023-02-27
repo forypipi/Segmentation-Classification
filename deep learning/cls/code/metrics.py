@@ -71,7 +71,7 @@ def FitMetric(pred, true, prob, pic_name, result_path="./cls/data/output", pic_d
             t.write(pic_name+": "+str(val.tolist())+"\n")
 
 if __name__=="__main__":
-    model = "VNet"
+    model = "UNet"
     test_df = pd.read_csv(os.path.join("./cls/data/output", model, "result.csv"), index_col=0)
     X = test_df.loc[:, "pred"]
     y = test_df.loc[:, "true"]
@@ -80,11 +80,11 @@ if __name__=="__main__":
     FitMetric(X, y, prob, model)
 
 # UNet:
-# accuracy score: 0.5294
-# macro precision score: 0.5022
-# macro recall score: 0.4938
-# macro F1 score: 0.4951
-# roc_auc score: 0.657
+# accuracy score: 0.4804
+# macro precision score: 0.3954
+# macro recall score: 0.4118
+# macro F1 score: 0.4004
+# roc_auc score: 0.6807
 
 # VNet:
 # accuracy score: 0.4706
