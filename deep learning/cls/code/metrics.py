@@ -1,30 +1,32 @@
+import os
 import numpy as np
 from matplotlib import pyplot as plt
 from numpy import interp
+import pandas as pd
 from sklearn.metrics import accuracy_score, roc_auc_score, roc_curve, \
     auc, precision_score, recall_score, f1_score, classification_report
 from sklearn.preprocessing import label_binarize
 
 
-def FitMetric(clf, test_X, test_y, pic_name, pic_dir = "..\pic\pic data"):
-    diction = {0: 'LUNG_CANCER', 1: 'LYMPHOMA', 2: 'MELANOMA'}
-    prediction = clf.predict(test_X)
-    print(f"measure result:{classification_report(test_y, prediction, digits=4)}")
-    print(f"accuracy score: {np.round(accuracy_score(test_y, prediction), 4)}")
-    print(f"macro precision score: {np.round(precision_score(test_y, prediction, average='macro'), 4)}")
-    print(f"macro recall score: {np.round(recall_score(test_y, prediction, average='macro'), 4)}")
-    print(f"macro F1 score: {np.round(f1_score(test_y, prediction, average='macro'), 4)}")
+def FitMetric(pred, true, prob, pic_name, result_path="./cls/data/output", pic_dir="./cls/pic/pic data"):
+    
+    diction = {0: 'NEGATIVE', 1: 'LYMPHOMA', 2: 'MELANOMA', 3: 'LUNG_CANCER'}
+
+    print(f"measure result:{classification_report(true, pred, digits=4)}")
+    print(f"accuracy score: {np.round(accuracy_score(true, pred), 4)}")
+    print(f"macro precision score: {np.round(precision_score(true, pred, average='macro'), 4)}")
+    print(f"macro recall score: {np.round(recall_score(true, pred, average='macro'), 4)}")
+    print(f"macro F1 score: {np.round(f1_score(true, pred, average='macro'), 4)}")
 
     # roc_auc
-    Y_pred_prob = clf.predict_proba(test_X)
-    test_y = label_binarize(test_y, classes=[0, 1, 2])
-    print(f"roc_auc score: {np.round(roc_auc_score(test_y, Y_pred_prob, multi_class='ovr'), 4)}")
+    true = label_binarize(true, classes=[0, 1, 2, 3])
+    print(f"roc_auc score: {np.round(roc_auc_score(true, prob, multi_class='ovr'), 4)}")
 
     fpr = dict()
     tpr = dict()
     roc_auc = dict()
-    for i in range(3):  # 3 classes
-        fpr[i], tpr[i], _ = roc_curve(test_y[:, i], Y_pred_prob[:, i])
+    for i in range(4):  # 3 classes
+        fpr[i], tpr[i], _ = roc_curve(true[:, i], prob[:, i])
         roc_auc[i] = auc(fpr[i], tpr[i])
 
     color = ['blue', 'grey', 'r']
@@ -33,7 +35,7 @@ def FitMetric(clf, test_X, test_y, pic_name, pic_dir = "..\pic\pic data"):
         plt.plot(fpr[i], tpr[i], color=color[i], label=f'label:{diction[i]}, auc={roc_auc[i]:0.4f}')
 
     # micro
-    fpr["micro"], tpr["micro"], thresholds = roc_curve(test_y.ravel(), Y_pred_prob.ravel())
+    fpr["micro"], tpr["micro"], thresholds = roc_curve(true.ravel(), prob.ravel())
     roc_auc["micro"] = auc(fpr["micro"], tpr["micro"])
     plt.plot(fpr["micro"], tpr["micro"], color='g', label=f'micro, auc={roc_auc["micro"]:0.4f}')
 
@@ -56,13 +58,37 @@ def FitMetric(clf, test_X, test_y, pic_name, pic_dir = "..\pic\pic data"):
     plt.ylabel('True Positive Rate')
     plt.xlabel('False Positive Rate')
     plt.grid(True)
+    plt.savefig(os.path.join(".", "cls", "pic", pic_name) + ".png")
     plt.show()
 
     for key, val in fpr.items():
         key = diction.get(key, key)
-        with open(pic_dir+r"\fpr_"+str(key)+".txt", "a") as f:
+        with open(os.path.join(pic_dir, r"fpr_"+str(key)+".txt"), "a") as f:
             f.write(pic_name+": "+str(val.tolist())+"\n")
     for key, val in tpr.items():
         key = diction.get(key, key)
-        with open(pic_dir+r"\tpr_"+str(key)+".txt", "a") as t:
+        with open(os.path.join(pic_dir, r"tpr_"+str(key)+".txt"), "a") as t:
             t.write(pic_name+": "+str(val.tolist())+"\n")
+
+if __name__=="__main__":
+    model = "VNet"
+    test_df = pd.read_csv(os.path.join("./cls/data/output", model, "result.csv"), index_col=0)
+    X = test_df.loc[:, "pred"]
+    y = test_df.loc[:, "true"]
+    prob = test_df.loc[:, "pred prob"]
+    prob = np.array(list(map(eval, prob)))
+    FitMetric(X, y, prob, model)
+
+# UNet:
+# accuracy score: 0.5294
+# macro precision score: 0.5022
+# macro recall score: 0.4938
+# macro F1 score: 0.4951
+# roc_auc score: 0.657
+
+# VNet:
+# accuracy score: 0.4706
+# macro precision score: 0.36
+# macro recall score: 0.344
+# macro F1 score: 0.3213
+# roc_auc score: 0.6522

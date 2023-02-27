@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 
-class UNet3D(nn.Module):
+class UNet(nn.Module):
     def __init__(self, channel_factor=1) -> None:
         super().__init__()
         n = 16 * channel_factor
@@ -34,8 +34,9 @@ class UNet3D(nn.Module):
         self.relu = nn.ReLU()
         self.glo_avr = nn.AdaptiveAvgPool3d(1)
         self.linear = nn.Sequential(
-            nn.Linear(in_features=self.channels[3]*4*4*4 + 1 + 3,
+            nn.Linear(in_features=self.channels[3]*2*2*2 + 1 + 3,
                       out_features=128),
+            nn.ReLU(),
             nn.Linear(in_features=128, out_features=4)
         )
         self.softmax = nn.Softmax(dim=1)
@@ -79,49 +80,46 @@ class VNet(nn.Module):
         super().__init__()
 
         n = 16 * channel_factor
-        self.channels = (n, n * 2, n * 4, n * 8, n * 16)
+        self.channels = (n, n * 2, n * 4, n * 8)
 
         self.channel_factor = channel_factor
         self.level1_down = nn.Sequential(
-            self.ResBlock(in_channels=2, out_channels=self.channels[0])
+            self.ConvBlock(in_channels=2, out_channels=self.channels[0])
         )
 
         self.down_1to2 = self.DownSampling(in_channels=self.channels[0], out_channels=self.channels[1])
         self.level2_down = nn.Sequential(
-            self.ResBlock(in_channels=self.channels[1], out_channels=self.channels[1]),
-            self.ResBlock(in_channels=self.channels[1], out_channels=self.channels[1])
+            ResBlock(in_channels=self.channels[1], out_channels=self.channels[1]),
+            ResBlock(in_channels=self.channels[1], out_channels=self.channels[1]),
         )
 
         self.down_2to3 = self.DownSampling(in_channels=self.channels[1], out_channels=self.channels[2])
         self.level3_down = nn.Sequential(
-            self.ResBlock(in_channels=self.channels[2], out_channels=self.channels[2]),
-            self.ResBlock(in_channels=self.channels[2], out_channels=self.channels[2]),
-            self.ResBlock(in_channels=self.channels[2], out_channels=self.channels[2])
+            ResBlock(in_channels=self.channels[2], out_channels=self.channels[2]),
+            ResBlock(in_channels=self.channels[2], out_channels=self.channels[2]),
         )
 
         self.down_3to4 = self.DownSampling(in_channels=self.channels[2], out_channels=self.channels[3])
         self.level4_down = nn.Sequential(
-            self.ResBlock(in_channels=self.channels[3], out_channels=self.channels[3]),
-            self.ResBlock(in_channels=self.channels[3], out_channels=self.channels[3]),
-            self.ResBlock(in_channels=self.channels[3], out_channels=self.channels[3])
+            ResBlock(in_channels=self.channels[3], out_channels=self.channels[3]),
+            ResBlock(in_channels=self.channels[3], out_channels=self.channels[3]),
         )
 
-        self.down_4to5 = self.DownSampling(in_channels=self.channels[3], out_channels=self.channels[4])
-        self.level5 = nn.Sequential(
-            self.ResBlock(in_channels=self.channels[4], out_channels=self.channels[4]),
-            self.ResBlock(in_channels=self.channels[4], out_channels=self.channels[4]),
-            self.ResBlock(in_channels=self.channels[4], out_channels=self.channels[4])
-        )
+        self.level1_conv = self.ConvBlock(in_channels=self.channels[0], out_channels=self.channels[1])
+        self.level2_conv = self.ConvBlock(in_channels=self.channels[1], out_channels=self.channels[2])
+        self.level3_conv = self.ConvBlock(in_channels=self.channels[2], out_channels=self.channels[1])
+        
+        self.maxpool1 = nn.MaxPool3d(kernel_size=(4, 4, 4), stride=(4, 4, 4))
+        self.maxpool2 = nn.MaxPool3d(kernel_size=(4, 4, 4), stride=(4, 4, 4))
+        self.maxpool3 = nn.MaxPool3d(kernel_size=(4, 4, 4), stride=(4, 4, 4))
 
-        self.prelu = nn.PReLU()
-        self.glo_avr = nn.AdaptiveAvgPool3d(1)
+        self.relu = nn.ReLU()
         # self.softmax = nn.Softmax()
         self.linear = nn.Sequential(
-            nn.Linear(in_features=(self.channels[0] + self.channels[1] + self.channels[2] + self.channels[3] +
-                                   self.channels[4]) + 1 + 3, out_features=32),
-            nn.Linear(in_features=32, out_features=4)
+            nn.Linear(in_features= self.channels[3]*2*2*2 + 1 + 3, out_features=128),
+            nn.LeakyReLU(),
+            nn.Linear(in_features=128, out_features=4)
         )
-        self.sigmoid = nn.Sigmoid()
         self.softmax = nn.Softmax(dim=1)
 
     def forward(self, img, sex, age):
@@ -135,26 +133,50 @@ class VNet(nn.Module):
         # x1_down_out = img + self.level1_down(img)     # for input is 1 channel
         x1_down_out = self.level1_down(img)
         x2_down_in = self.down_1to2(x1_down_out)
-        x2_down_out = x2_down_in + self.level2_down(x2_down_in)
+        x2_down_out = self.level2_down(x2_down_in)
         x3_down_in = self.down_2to3(x2_down_out)
-        x3_down_out = x3_down_in + self.level3_down(x3_down_in)
+        x3_down_out = self.level3_down(x3_down_in)
         x4_down_in = self.down_3to4(x3_down_out)
-        x4_down_out = x4_down_in + self.level4_down(x4_down_in)
-        x5_down_in = self.down_4to5(x4_down_out)
-        x5_down_out = self.level5(x5_down_in)
+        x4_down_out = self.level4_down(x4_down_in)
 
-        img_feature1 = torch.reshape(self.glo_avr(x1_down_out), (-1, self.channels[0]))
-        img_feature2 = torch.reshape(self.glo_avr(x2_down_out), (-1, self.channels[1]))
-        img_feature3 = torch.reshape(self.glo_avr(x3_down_out), (-1, self.channels[2]))
-        img_feature4 = torch.reshape(self.glo_avr(x4_down_out), (-1, self.channels[3]))
-        img_feature5 = torch.reshape(self.glo_avr(x5_down_out), (-1, self.channels[4]))
+        img_feature4 = x4_down_out.view(x4_down_out.size(0), -1)
+
         sex = torch.reshape(sex, (-1, 3))
         age = torch.reshape(age, (-1, 1))
-        classify_in = torch.cat((img_feature1, img_feature2, img_feature3, img_feature4, img_feature5, sex, age), dim=1)
+        classify_in = torch.cat((img_feature4, sex, age), dim=1)
         classify_out = self.softmax(self.linear(classify_in))
 
         return classify_out
+    
+    def DownSampling(self, in_channels, out_channels, kernel_size=(4, 4, 4), stride=(4, 4, 4)):
+        conv = nn.Conv3d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, stride=stride)
+        relu = nn.ReLU()
+        sequence = nn.Sequential()
+        sequence.add_module("DownConv3D", conv)
+        sequence.add_module("relu", relu)
+        return sequence
+    
+    def ConvBlock(self, in_channels, out_channels, kernel_size=(3, 3, 3), padding=(1, 1, 1)):
+        conv = nn.Conv3d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, padding=padding)
+        bn = nn.BatchNorm3d(num_features=out_channels)
+        relu = nn.ReLU()
+        sequence = nn.Sequential()
+        sequence.add_module("Conv3D", conv)
+        sequence.add_module("Batch Normalization", bn)
+        sequence.add_module("relu", relu)
+        return sequence
 
+class ResBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size=(3, 3, 3), padding=(1, 1, 1)):
+        super(ResBlock, self).__init__()
+        self.ConBlock  = nn.Sequential(
+            nn.Conv3d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, padding=padding),
+            nn.BatchNorm3d(num_features=out_channels),
+            nn.LeakyReLU()
+        )
+
+    def forward(self, x):
+        return x + self.ConBlock(x)
 
 class AttentionUNetblock(nn.Module):
     def __init__(self, F_g, F_l, F_int):
@@ -185,6 +207,9 @@ class AttentionUNetblock(nn.Module):
         psi = self.psi(psi)
         out = x * psi
         return out
+    
+    
+
 
 
 class AttentionUNet(nn.Module):
@@ -283,7 +308,7 @@ class AttentionUNet(nn.Module):
 
     def DownSampling(self, in_channels, out_channels, kernel_size=(2, 2, 2), stride=(2, 2, 2)):
         conv = nn.Conv3d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, stride=stride)
-        relu = nn.PReLU()
+        relu = nn.ReLU()
         sequence = nn.Sequential()
         sequence.add_module("DownConv3D", conv)
         sequence.add_module("relu", relu)

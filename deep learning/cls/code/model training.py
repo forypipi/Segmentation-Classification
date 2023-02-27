@@ -35,7 +35,7 @@ def normalized(img, range1=(0, 1)):
     img = img * (range1[1] - range1[0]) + range1[0]
     return Tensor(img)
 
-def training(model, optimizer, cls_loss, train_loader: DataLoader, writer, verbose=False, EPOCHS=30):
+def training(model, optimizer, cls_loss, train_loader: DataLoader, writer, verbose=False, EPOCHS=50):
     step = 0
     avg_train_loss = 0
     if verbose:
@@ -74,9 +74,7 @@ def val(model, val_loader: DataLoader, cls_loss, writer):
     total_loss = 0
     loop = tqdm(val_loader, total=len(val_loader))
     step = 0
-    pred_result = []
-    true_result = []
-    study = []
+    pred_result, true_result, pred_prob, study = [], [], [], []
     with torch.no_grad():
         for data in loop:
             step += 1
@@ -84,13 +82,14 @@ def val(model, val_loader: DataLoader, cls_loss, writer):
             classification = model(images, sexs, ages)
             classification = nn.Softmax(dim=1)(classification)
             pred_result.extend(list(map(int, torch.argmax(classification, dim=1).cpu())))
+            pred_prob.extend(classification.cpu().tolist())
             true_result.extend(list(map(int, labels.cpu())))
             study.extend(study_id)
             clsloss = cls_loss(classification, labels)
             total_loss += clsloss
             writer.add_scalar("test loss", total_loss / step, step)
         avg_cls_loss = total_loss / len(val_loader)
-    result = pd.DataFrame({"pred": pred_result, "true": true_result}, index=study)
+    result = pd.DataFrame({"pred": pred_result, "true": true_result, "pred prob": pred_prob}, index=study)
     return avg_cls_loss, result
 
 class MyData(Dataset):
@@ -146,7 +145,7 @@ writer = SummaryWriter('./cls/log/UNet')
 lr = 1e-5
 
 weight_decay = 1e-5
-batch = 2
+batch = 16
 # seg_loss = sigmoid_focal_loss().to(device)
 seg_loss = loss.WeightedFocalLoss(device=device)
 cls_loss = nn.CrossEntropyLoss().to(device)
@@ -154,45 +153,47 @@ test_data = MyData(clinical, classes, [-1], device, root_dir=root_dir)
 test_dataloader = DataLoader(dataset=test_data, batch_size=batch, shuffle=True, drop_last=False)
 
 trainLossList, ValLossList = [], []
-for validation in range(3):
-    print(f"start training on valid {validation}")
-    trainlist = list(range(validation))
-    trainlist.extend(list(range(validation+1, 3)))
-    train_data = MyData(clinical, classes, trainlist, device, root_dir=root_dir)
-    train_dataloader = DataLoader(dataset=train_data, batch_size=batch, shuffle=True, drop_last=False)
-    valid_data = MyData(clinical, classes, [validation], device, root_dir=root_dir)
-    valid_dataloader = DataLoader(dataset=valid_data, batch_size=batch, shuffle=True, drop_last=False)
+# for validation in range(3):
+#     print(f"start training on valid {validation}")
+#     trainlist = list(range(validation))
+#     trainlist.extend(list(range(validation+1, 3)))
+#     train_data = MyData(clinical, classes, trainlist, device, root_dir=root_dir)
+#     train_dataloader = DataLoader(dataset=train_data, batch_size=batch, shuffle=True, drop_last=False)
+#     valid_data = MyData(clinical, classes, [validation], device, root_dir=root_dir)
+#     valid_dataloader = DataLoader(dataset=valid_data, batch_size=batch, shuffle=True, drop_last=False)
 
-    model = models.UNet3D().to(device)
-    # model = models.VNet().to(device)
+#     model = models.UNet().to(device)
+#     # model = models.VNet().to(device)
 
-    optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)    # L2 loss
+#     optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)    # L2 loss
 
-    model, TrainLoss = training(model, optimizer, cls_loss, train_dataloader, writer=writer)
-    trainLossList.append(float(TrainLoss.cpu().detach()))
+#     model, TrainLoss = training(model, optimizer, cls_loss, train_dataloader, writer=writer)
+#     trainLossList.append(float(TrainLoss.cpu().detach()))
 
-    print(f"start validation on valid {validation}")
+#     print(f"start validation on valid {validation}")
 
-    avg_cls_loss, _ = val(model, valid_dataloader, cls_loss, writer=writer)
-    ValLossList.append(float(avg_cls_loss.cpu()))
+#     avg_cls_loss, _ = val(model, valid_dataloader, cls_loss, writer=writer)
+#     ValLossList.append(float(avg_cls_loss.cpu()))
 
-loss_df = pd.DataFrame({"train loss": trainLossList, "valid loss": ValLossList})
-loss_df.to_csv("./cls/Performance/UNet/search loss.csv")
+# loss_df = pd.DataFrame({"train loss": trainLossList, "valid loss": ValLossList})
+# loss_df.to_csv("./cls/Performance/UNet/search loss.csv")
 
 # retrain for best
 train_data = MyData(clinical, classes, list(range(10)), device=device)
 train_dataloader = DataLoader(dataset=train_data, batch_size=batch, shuffle=True, drop_last=False)
 
-model = models.UNet3D().to(device)
-# model = VNet().to(device)
+# model = models.UNet().to(device)
+model = models.UNet().to(device)
 optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)    # L2 loss
 
 model, _, trainLossList = training(model, optimizer, cls_loss, train_dataloader, verbose=True, writer=writer)
+
+# model = torch.load("./cls/model/UNet.pt")
 testLoss, result = val(model, test_dataloader, cls_loss, writer=writer)
 
 torch.save(model, r'./cls/model/UNet.pt')
 trainLossList.to_csv("./cls/Performance/UNet/trainLoss.csv")
 result.to_csv("./cls/data/output/UNet/result.csv")
 print("-"*20, f"\nTest total Loss: {testLoss}")
-writer.close()
+# writer.close()
 print(f"total time: {time.time() - start: .2f}s")
