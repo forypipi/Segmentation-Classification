@@ -17,13 +17,13 @@ for pic_name in ["NEGATIVE", "LUNG_CANCER", "LYMPHOMA", "MELANOMA", "macro", "mi
     color = ['blue', 'grey', 'r', 'g']
     plt.plot(np.arange(0, 1.1, 0.1), np.arange(0, 1.1, 0.1), color='black', linestyle='--')
 
-    for i in range(2):
+    for i in range(3):
         ftmp = fpr_list[i][:-1].split(": ")
         fpr[ftmp[0]] = eval(ftmp[1])
         ttmp = tpr_list[i][:-1].split(": ")
         tpr[ttmp[0]] = eval(ttmp[1])
 
-    for i, (key, value) in enumerate(fpr.items()):  # 2 models
+    for i, (key, value) in enumerate(fpr.items()):  # 3 models
         print(i)
         roc_auc[i] = auc(fpr[key], tpr[key])
         plt.plot(fpr[key], tpr[key], color=color[i], label=f'{key}, auc={roc_auc[i]:0.4f}')

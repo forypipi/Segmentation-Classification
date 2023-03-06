@@ -25,13 +25,13 @@ def FitMetric(pred, true, prob, pic_name, result_path="./cls/data/output", pic_d
     fpr = dict()
     tpr = dict()
     roc_auc = dict()
-    for i in range(4):  # 3 classes
+    for i in range(4):  # 4 classes
         fpr[i], tpr[i], _ = roc_curve(true[:, i], prob[:, i])
         roc_auc[i] = auc(fpr[i], tpr[i])
 
-    color = ['blue', 'grey', 'r']
+    color = ['blue', 'grey', 'r', 'violet']
     plt.plot(np.arange(0, 1.1, 0.1), np.arange(0, 1.1, 0.1), color='black', linestyle='--')
-    for i in range(3):
+    for i in range(4):
         plt.plot(fpr[i], tpr[i], color=color[i], label=f'label:{diction[i]}, auc={roc_auc[i]:0.4f}')
 
     # micro
@@ -71,20 +71,21 @@ def FitMetric(pred, true, prob, pic_name, result_path="./cls/data/output", pic_d
             t.write(pic_name+": "+str(val.tolist())+"\n")
 
 if __name__=="__main__":
-    model = "VNet"
-    test_df = pd.read_csv(os.path.join("./cls/data/output", model, "result.csv"), index_col=0)
-    X = test_df.loc[:, "pred"]
-    y = test_df.loc[:, "true"]
+    model = "ResNet3D"
+    test_df = pd.read_csv(os.path.join("./cls/data/output", model, "val0/train_result.csv"), index_col=0)
+    pred = test_df.loc[:, "pred"]
+    true = test_df.loc[:, "true"]
     prob = test_df.loc[:, "pred prob"]
     prob = np.array(list(map(eval, prob)))
-    FitMetric(X, y, prob, model)
+    FitMetric(pred, true, prob, model)
 
 # UNet:
-# accuracy score: 0.4804
-# macro precision score: 0.3954
-# macro recall score: 0.4118
-# macro F1 score: 0.4004
-# roc_auc score: 0.6807
+# train acc: 0.9726
+# accuracy score: 0.549
+# macro precision score: 0.4672
+# macro recall score: 0.459
+# macro F1 score: 0.4627
+# roc_auc score: 0.7274
 
 # VNet:
 # accuracy score: 0.451
@@ -92,3 +93,11 @@ if __name__=="__main__":
 # macro recall score: 0.3911
 # macro F1 score: 0.3912
 # roc_auc score: 0.6624
+
+# ResNet3D
+# training acc: 1
+# accuracy score: 0.5952
+# macro precision score: 0.5899
+# macro recall score: 0.5902
+# macro F1 score: 0.5894
+# roc_auc score: 0.8606
