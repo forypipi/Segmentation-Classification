@@ -17,7 +17,7 @@ import pandas as pd
 from sklearn.model_selection import train_test_split, StratifiedKFold
 
 import loss
-from models.resnet import ResNet50
+from models.resnet import ResNet18
 from models.densenet import DenseNet121_3d
 from models.models import UNet
 
@@ -186,18 +186,18 @@ root_dir = r'/data/orfu/DeepLearning/Segmentation-Classification/oufu_data_400G/
 # root_dir = r'/data/zhxie/oufu_data_400G/preprocessed'
 # root_dir = r'E:\dataset\preprocessed'
 
-kFold = 2
+kFold = 3
 labels = ["NEGATIVE", "LUNG_CANCER", "LYMPHOMA", "MELANOMA"]
 dfs = [pd.DataFrame({"class": [label] * len(os.listdir(os.path.join(root_dir, label))), "name": os.listdir(os.path.join(root_dir, label))}) for label in labels]
 Whole_df = pd.concat(dfs)
-classes = split_train_val_test(clinical=Whole_df, kFold=kFold, test_radio=0.7)
+classes = split_train_val_test(clinical=Whole_df, kFold=kFold, test_radio=0.2)
 
 model_name = "ResNet3D"
 lr = 5e-4
 torch.set_default_dtype(torch.float32)
 weight_decay = 5e-2
 batch = 16
-eopchs = 40
+eopchs = 20
 # seg_loss = sigmoid_focal_loss().to(device)
 seg_loss = loss.WeightedFocalLoss(device=device)
 cls_loss = nn.CrossEntropyLoss().to(device)
@@ -205,72 +205,71 @@ cls_loss = nn.CrossEntropyLoss().to(device)
 test_data = MyData(classes, [-1], device, root_dir=root_dir)
 test_dataloader = DataLoader(dataset=test_data, batch_size=batch, shuffle=False, drop_last=False)
 trainLossList, ValLossList = [], []
-# for validation in range(kFold):
-#     print(f"start training on valid {validation}")
+for validation in range(kFold):
+    print(f"start training on valid {validation}")
     
-#     paths = [
-#         os.path.join('./cls/log/train', model_name, "val"+str(validation)),
-#         os.path.join('./cls/log/test', model_name, "val"+str(validation)),
-#         os.path.join("./cls/Performance", model_name, "val"+str(validation)),
-#         os.path.join("./cls/data/output", model_name, "val"+str(validation))
-#     ]
-#     for dir in paths:
-#         if not os.path.exists(dir):
-#             os.makedirs(dir)
-#     train_writer = SummaryWriter(os.path.join('./cls/log/train', model_name, "val"+str(validation)))
-#     test_writer = SummaryWriter(os.path.join('./cls/log/test', model_name, "val"+str(validation)))
+    paths = [
+        os.path.join('./cls/log/train', model_name, "val"+str(validation)),
+        os.path.join('./cls/log/test', model_name, "val"+str(validation)),
+        os.path.join("./cls/Performance", model_name, "val"+str(validation)),
+        os.path.join("./cls/data/output", model_name, "val"+str(validation))
+    ]
+    for dir in paths:
+        if not os.path.exists(dir):
+            os.makedirs(dir)
+    train_writer = SummaryWriter(os.path.join('./cls/log/train', model_name, "val"+str(validation)))
+    test_writer = SummaryWriter(os.path.join('./cls/log/test', model_name, "val"+str(validation)))
 
-#     trainlist = list(range(validation))
-#     trainlist.extend(list(range(validation+1, kFold)))
-#     train_data = MyData(classes, trainlist, device, root_dir=root_dir)
-#     train_dataloader = DataLoader(dataset=train_data, batch_size=batch, shuffle=True, drop_last=False)
-#     valid_data = MyData(classes, [validation], device, root_dir=root_dir)
-#     valid_dataloader = DataLoader(dataset=valid_data, batch_size=batch, shuffle=False, drop_last=False)
+    trainlist = list(range(validation))
+    trainlist.extend(list(range(validation+1, kFold)))
+    train_data = MyData(classes, trainlist, device, root_dir=root_dir)
+    train_dataloader = DataLoader(dataset=train_data, batch_size=batch, shuffle=True, drop_last=False)
+    valid_data = MyData(classes, [validation], device, root_dir=root_dir)
+    valid_dataloader = DataLoader(dataset=valid_data, batch_size=batch, shuffle=False, drop_last=False)
 
-#     # model = UNet().to(device)
-#     # model = models.VNet().to(device)
-#     model = ResNet50().to(device)
-#     # model = DenseNet121_3d().to(device)
-#     optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)    # L2 loss
-#     # optimizer = optim.SGD(model.parameters(), lr=lr, weight_decay=weight_decay)    # L2 loss
+    # model = UNet().to(device)
+    # model = models.VNet().to(device)
+    model = ResNet18().to(device)
+    # model = DenseNet121_3d().to(device)
+    optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)    # L2 loss
 
-#     model, _, trainLossList = training(model, optimizer, cls_loss, train_dataloader, valid_dataloader, verbose=True, writer={"train": train_writer, "test": test_writer}, tag="val"+str(validation), EPOCHS=eopchs)
-#     print(f"start validation on valid {validation}")
-#     testLoss, test_result = val(model, test_dataloader, cls_loss)
-#     print("get training result")
-#     testLoss, train_result = val(model, train_dataloader, cls_loss)
+    model, _, trainLossList = training(model, optimizer, cls_loss, train_dataloader, valid_dataloader, verbose=True, writer={"train": train_writer, "test": test_writer}, tag="val"+str(validation), EPOCHS=eopchs)
+    print(f"start validation on valid {validation}")
+    testLoss, test_result = val(model, test_dataloader, cls_loss)
+    print("get training result")
+    testLoss, train_result = val(model, train_dataloader, cls_loss)
 
-#     torch.save(model, os.path.join('./cls/model', model_name+str(validation)+'.pt'))
-#     trainLossList.to_csv(os.path.join("./cls/Performance", model_name, "val"+str(validation), "trainLoss.csv"))
-#     test_result.to_csv(os.path.join("./cls/data/output", model_name, "val"+str(validation), "test_result.csv"))
-#     train_result.to_csv(os.path.join("./cls/data/output", model_name, "val"+str(validation), "train_result.csv"))
+    torch.save(model, os.path.join('./cls/model', model_name+str(validation)+'.pt'))
+    trainLossList.to_csv(os.path.join("./cls/Performance", model_name, "val"+str(validation), "trainLoss.csv"))
+    test_result.to_csv(os.path.join("./cls/data/output", model_name, "val"+str(validation), "test_result.csv"))
+    train_result.to_csv(os.path.join("./cls/data/output", model_name, "val"+str(validation), "train_result.csv"))
 
 # loss_df = pd.DataFrame({"train loss": trainLossList, "valid loss": ValLossList})
 # loss_df.to_csv("./cls/Performance/UNet/search loss.csv")
 
 
 # retrain for best
-train_writer = SummaryWriter(os.path.join('./cls/log/train', model_name, "val"))
-test_writer = SummaryWriter(os.path.join('./cls/log/test', model_name, "val"))
-train_data = MyData(classes, list(range(kFold)), device=device, root_dir=root_dir)
-train_dataloader = DataLoader(dataset=train_data, batch_size=batch, shuffle=True, drop_last=False)
+# train_writer = SummaryWriter(os.path.join('./cls/log/train', model_name, "val"))
+# test_writer = SummaryWriter(os.path.join('./cls/log/test', model_name, "val"))
+# train_data = MyData(classes, list(range(kFold)), device=device, root_dir=root_dir)
+# train_dataloader = DataLoader(dataset=train_data, batch_size=batch, shuffle=True, drop_last=False)
 
-# model = UNet().to(device)
-# model = models.VNet().to(device)
-model = ResNet50().to(device)
-# model = DenseNet121_3d().to(device)
-optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)    # L2 loss
+# # model = UNet().to(device)
+# # model = models.VNet().to(device)
+# model = ResNet18().to(device)
+# # model = DenseNet121_3d().to(device)
+# optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)    # L2 loss
 
-model, _, trainLossList = training(model, optimizer, cls_loss, train_dataloader, test_dataloader, verbose=True, writer={"train": train_writer, "test": test_writer})
-print("get test result")
-testLoss, test_result = val(model, test_dataloader, cls_loss)
-print("get train result")
-testLoss, train_result = val(model, train_dataloader, cls_loss)
+# model, _, trainLossList = training(model, optimizer, cls_loss, train_dataloader, test_dataloader, verbose=True, writer={"train": train_writer, "test": test_writer}, EPOCHS=eopchs)
+# print("get test result")
+# testLoss, test_result = val(model, test_dataloader, cls_loss)
+# print("get train result")
+# trainLoss, train_result = val(model, train_dataloader, cls_loss)
 
-torch.save(model, os.path.join('./cls/model', model_name+'.pt'))
-trainLossList.to_csv(os.path.join("./cls/Performance", model_name, "trainLoss.csv"))
-test_result.to_csv(os.path.join("./cls/data/output", model_name, "test_result.csv"))
-train_result.to_csv(os.path.join("./cls/data/output", model_name, "train_result.csv"))
-print("-"*20, f"\nTest total Loss: {testLoss}")
-# writer.close()
+# torch.save(model, os.path.join('./cls/model', model_name+'.pt'))
+# trainLossList.to_csv(os.path.join("./cls/Performance", model_name, "trainLoss.csv"))
+# test_result.to_csv(os.path.join("./cls/data/output", model_name, "test_result.csv"))
+# train_result.to_csv(os.path.join("./cls/data/output", model_name, "train_result.csv"))
+# print("-"*20, f"\nTest total Loss: {testLoss}")
+# # writer.close()
 print(f"total time: {time.time() - start: .2f}s")

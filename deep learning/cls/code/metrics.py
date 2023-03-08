@@ -72,7 +72,7 @@ def FitMetric(pred, true, prob, pic_name, result_path="./cls/data/output", pic_d
 
 if __name__=="__main__":
     model = "ResNet3D"
-    test_df = pd.read_csv(os.path.join("./cls/data/output", model, "val0/train_result.csv"), index_col=0)
+    test_df = pd.read_csv(os.path.join("./cls/data/output", model, "test_result.csv"), index_col=0)
     pred = test_df.loc[:, "pred"]
     true = test_df.loc[:, "true"]
     prob = test_df.loc[:, "pred prob"]
@@ -96,8 +96,8 @@ if __name__=="__main__":
 
 # ResNet3D
 # training acc: 1
-# accuracy score: 0.5952
-# macro precision score: 0.5899
-# macro recall score: 0.5902
-# macro F1 score: 0.5894
-# roc_auc score: 0.8606
+# accuracy score: 0.9083
+# macro precision score: 0.8955
+# macro recall score: 0.8388
+# macro F1 score: 0.8591
+# roc_auc score: 0.98
