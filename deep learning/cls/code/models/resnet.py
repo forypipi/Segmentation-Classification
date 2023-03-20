@@ -75,25 +75,30 @@ class BasicBlock(nn.Module):
         return out
 
 class ResNet18(nn.Module):
-    def __init__(self, block=BasicBlock, layers=[2, 2, 2, 2], input_size=(128, 128, 128), no_cuda = False, num_classes=4):
+    def __init__(self, img_channels=2, block=BasicBlock, layers=[2, 2, 2, 2], depth=4, avgpool_size=4, no_cuda = False, num_classes=4):
+        print("training on ResNet")
         self.in_channels = 32
         self.no_cuda = no_cuda
         self.num_classes = num_classes
         self.expansion = block.expansion
+        self.depth = depth
         super(ResNet18, self).__init__()
-        # self.conv1 = nn.Conv3d(1, self.in_channels, kernel_size=7, stride=2, padding=3, bias=False)
-        self.conv1 = nn.Conv3d(1, self.in_channels, kernel_size=3, stride=2, padding=1, bias=False)
+        self.conv1 = nn.Conv3d(img_channels, self.in_channels, kernel_size=3, stride=2, padding=1, bias=False)     # 128 -> 64
 
         self.bn1 = nn.BatchNorm3d(self.in_channels)
         self.relu = nn.ReLU(inplace=True)
-        self.maxpool = nn.MaxPool3d(kernel_size=2, stride=2)
+        self.maxpool = nn.MaxPool3d(kernel_size=2, stride=2)        # 64 -> 32
         self.layer1 = self._make_layer(block, out_channel=self.in_channels, blocks=layers[0])                         # ResBlock change C to 64*4=256 by 1*1*1 kernel
-        self.layer2 = self._make_layer(block, out_channel=self.in_channels * 2, blocks=layers[1], stride=2)              # downsampled by conv3d
-        self.layer3 = self._make_layer(block, out_channel=self.in_channels * 2, blocks=layers[2], stride=2)
-        # self.layer4 = self._make_layer(block, out_channel=512, blocks=layers[3], stride=2)
+        if depth >= 2:
+            self.layer2 = self._make_layer(block, out_channel=self.in_channels * 2, blocks=layers[1], stride=2)              # downsampled by conv3d
+        if depth >= 3:
+            self.layer3 = self._make_layer(block, out_channel=self.in_channels * 2, blocks=layers[2], stride=2)             # 16 -> 8
+        if depth >= 4:
+            self.layer4 = self._make_layer(block, out_channel=self.in_channels * 2, blocks=layers[3], stride=2)          # 8 -> 4
 
-        self.avgpool = nn.AdaptiveAvgPool3d((4, 4, 4))
-        self.fc = nn.Linear(self.in_channels*self.expansion*4*4*4, self.num_classes)
+        avg_size = tuple(int(avgpool_size) for _ in range(3))
+        self.avgpool = nn.AdaptiveAvgPool3d(avg_size)
+        self.fc = nn.Linear(self.in_channels*self.expansion*avg_size[0]*avg_size[1]*avg_size[2], self.num_classes)
 
         # for m in self.modules():
         #     if isinstance(m, nn.Conv3d):
@@ -132,16 +137,19 @@ class ResNet18(nn.Module):
         x = self.relu(x)
         x = self.maxpool(x)
         x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
-        # x = self.layer4(x)
+        if self.depth >= 2:
+            x = self.layer2(x)
+        if self.depth >= 3:
+            x = self.layer3(x)
+        if self.depth >= 4:
+            x = self.layer4(x)
         x = self.avgpool(x)
         x = torch.flatten(x, 1)
         x = self.fc(x)
         return x
 
 if __name__ == "__main__":
-    test = torch.rand(1, 2, 128, 128, 128).cuda()
-    model = ResNet50().cuda()
-    # print(model)
+    test = torch.rand(16, 2, 128, 128, 128).cuda()
+    model = ResNet18().cuda()
+    print(model)
     print(model(test).shape)

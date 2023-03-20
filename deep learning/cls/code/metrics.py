@@ -71,13 +71,21 @@ def FitMetric(pred, true, prob, pic_name, result_path="./cls/data/output", pic_d
             t.write(pic_name+": "+str(val.tolist())+"\n")
 
 if __name__=="__main__":
-    model = "ResNet3D"
-    test_df = pd.read_csv(os.path.join("./cls/data/output", model, "test_result.csv"), index_col=0)
+    model_name = "ViT3D_CT"
+
+    grid_search_path = os.path.join("./cls/Performance", model_name)
+    validation_df = pd.read_csv(os.path.join(grid_search_path, "grid search.csv"), index_col=0)
+    params = validation_df.loc[validation_df['accuracy'].idxmax()].to_dict()
+    params.pop('accuracy')
+    param_path = "_".join([str(item) for key_value in params.items() for item in key_value])
+    print(param_path)
+
+    test_df = pd.read_csv(os.path.join("./cls/data/output", model_name, param_path, "best", "train_result.csv"), index_col=0)
     pred = test_df.loc[:, "pred"]
     true = test_df.loc[:, "true"]
     prob = test_df.loc[:, "pred prob"]
     prob = np.array(list(map(eval, prob)))
-    FitMetric(pred, true, prob, model)
+    FitMetric(pred, true, prob, model_name)
 
 # UNet:
 # train acc: 0.9726
@@ -94,10 +102,80 @@ if __name__=="__main__":
 # macro F1 score: 0.3912
 # roc_auc score: 0.6624
 
-# ResNet3D
-# training acc: 1
-# accuracy score: 0.9083
-# macro precision score: 0.8955
-# macro recall score: 0.8388
-# macro F1 score: 0.8591
-# roc_auc score: 0.98
+# ResNet3D_PET
+# lr_0.0005_WeightDecay_0.01_depth_2.0_PoolSize_4.0_threshold_0.1_epoch_34.0
+# train accuracy: 0.9965
+# accuracy score: 0.75
+# macro precision score: 0.7525
+# macro recall score: 0.7601
+# macro F1 score: 0.7456
+# roc_auc score: 0.9181
+
+# ResNet3D_CT
+# lr_0.0005_WeightDecay_0.02_depth_2.0_PoolSize_4.0_threshold_0.1_epoch_40.0
+# train accuracy: 0.996
+# accuracy score: 0.7063
+# macro precision score: 0.7047
+# macro recall score: 0.703
+# macro F1 score: 0.6991
+# roc_auc score: 0.9156
+
+# ResNet3D_PETCT
+# lr_0.0005_WeightDecay_0.02_depth_2.0_PoolSize_4.0_threshold_0.15_epoch_60.0
+# train accuracy: 0.9868
+# accuracy score: 0.7302
+# macro precision score: 0.7389
+# macro recall score: 0.7334
+# macro F1 score: 0.7302
+# roc_auc score: 0.9217
+
+# DenseNet3D_CT
+# lr_0.0001_WeightDecay_0.01_depth_4.0_PoolSize_4.0_threshold_0.15_epoch_59.0
+# training accuracy: 0.9934
+# accuracy score: 0.6667
+# macro precision score: 0.6564
+# macro recall score: 0.6516
+# macro F1 score: 0.6522
+# roc_auc score: 0.8868
+
+# DenseNet3D_PET
+# lr_0.0001_WeightDecay_0.01_depth_4.0_PoolSize_4.0_threshold_0.15_epoch_59.0
+# training accuracy: 0.9898
+# accuracy score: 0.7937
+# macro precision score: 0.7967
+# macro recall score: 0.8039
+# macro F1 score: 0.7924
+# roc_auc score: 0.9346
+
+# DenseNet3D_PETCT
+# lr_0.0001_WeightDecay_0.01_depth_4.0_PoolSize_4.0_threshold_0.15_epoch_59.0
+# training accuracy: 0.9726
+# accuracy score: 0.7024
+# macro precision score: 0.7013
+# macro recall score: 0.7002
+# macro F1 score: 0.6851
+# roc_auc score: 0.9197
+
+# ViT3D_CT
+# training accuracy: 0.7351
+# accuracy score: 0.496
+# macro precision score: 0.5068
+# macro recall score: 0.5018
+# macro F1 score: 0.4935
+# roc_auc score: 0.7603
+
+# ViT3D_PET
+# training accuracy: 0.7351
+# accuracy score: 0.496
+# macro precision score: 0.5068
+# macro recall score: 0.5018
+# macro F1 score: 0.4935
+# roc_auc score: 0.7603
+
+# ViT3D_PETCT
+# training accuracy: 0.9682
+# accuracy score: 0.5476
+# macro precision score: 0.5508
+# macro recall score: 0.5399
+# macro F1 score: 0.5417
+# roc_auc score: 0.8128

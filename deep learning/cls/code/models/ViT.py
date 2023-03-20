@@ -17,7 +17,6 @@ class PreNorm(nn.Module):
         Wrap a LayerNorm before attention block or fc layer
         """
         super().__init__()
-        print(dim)
         self.norm = nn.LayerNorm(dim)
         self.fn = fn
 
@@ -42,7 +41,7 @@ class Attention(nn.Module):
         """
         :param dim: patch's dim before(same as after) each attention block
         :param heads: head number, 1 for single head
-        :param dim_head: each head dimision for multi-head
+        :param dim_head: each head's dimision for multi-head
         Wrap a LayerNorm before attention block or fc layer
         """
         super().__init__()
@@ -65,20 +64,19 @@ class Attention(nn.Module):
         qkv = qkv.chunk(3, dim=-1)   # chunk: split patch vector (b, n(513), dim*3) ---> 3 * (b, n, dim); qkv: tuple, 3 element, each element is (b, n, dim)
         q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h=self.heads), qkv)          # q, k, v   (b, h(16), n(513), dim_head(1024 / 16 = 64))
 
-        dots = einsum('b h i d, b h j d -> b h i j', q, k) * self.scale
-        attn = self.attend(dots)
-
-        out = einsum('b h i j, b h j d -> b h i d', attn, v)
-        out = rearrange(out, 'b h n d -> b n (h d)')
-        return self.to_out(out)
+        dots = einsum('b h i d, b h j d -> b h i j', q, k) * self.scale     # dots:(b, h(16), n(513), n(513)), dots=Q(K^T), element ij means inner product on i-th row of Q and j-th row of K
+        attn = self.attend(dots)        # softmax(dim=-1): (b, h(16), n(513), n(513, softmax on this axis)) which is doing softmax on row  direction, doing softmax on each patch's result after querying keys
+        out = einsum('b h i j, b h j d -> b h i d', attn, v)        # (b, h(16), n(513), dim_head(64)), softmax(Q(K^T))V, add V's rows by their importance(softmaxed value)
+        out = rearrange(out, 'b h n d -> b n (h d)')        # reshape(concat) to (b, n(513), n(1024))
+        return self.to_out(out)      # linear projection after concat result (b, n(513), n(1024))
 
 class Transformer(nn.Module):
     def __init__(self, dim, depth, heads, dim_head, mlp_dim, dropout=0.):
         """
         :param dim: patch's dim
         :param depth: number of transformer block
-        :param heads: 
-        :param dim_head: 
+        :param heads: head number, 1 for single head
+        :param dim_head: each head's dimision for multi-head
         :param mlp_dim: mlp layer dim inside transformer block
         :param dropout: transformer block drop rate
         """
@@ -92,35 +90,49 @@ class Transformer(nn.Module):
     
     def forward(self, x):
         for attn, ff in self.layers:
-            x += attn(x)
-            x += ff(x)
+            x = x + attn(x)
+            x = x + ff(x)
         return x
 
 class ViT(nn.Module):
-    def __init__(self, *, image_size, patch_size, num_classes, dim, depth, heads, mlp_dim, pool='cls', channels=1, dim_head=64, dropout=0., emb_dropout=0.):
+    def __init__(self, *, 
+                 image_size=(128, 128, 128), 
+                 patch_size=(16, 16, 16), 
+                 num_classes=4, 
+                 dim=1024, 
+                 depth=8, 
+                 heads=16, 
+                 mlp_dim=2048, 
+                 pool='cls', 
+                 in_chans=2, 
+                 dim_head=64, 
+                 dropout=0.1, 
+                 emb_dropout=0.1
+                 ):
         """
         :param image_size: resolution of input image
         :param patch_size: resolution of each patch
         :param num_classes: classification number
         :param dim: output dim of fc layer after input patch embedding, each patchs' dim after attention blocks 
         :param depth: number of transformer block
-        :param heads: 
+        :param heads: head number, 1 for single head
         :param pool: whether use cls head or avgpool for classification
         :param mlp_dim: mlp layer dim inside transformer block
-        :param channels: image channel
-        :param dim_head: 
+        :param in_chans: image channel
+        :param dim_head: each head's dimision for multi-head
         :param dropout: transformer drop rate
         :param emb_dropout: embedding drop rate
 
         """
         super().__init__()
+        print("training on ViT")
         image_height, image_width, image_depth = pair(image_size)
         patch_height, patch_width, patch_depth = pair(patch_size)
-
+        dim, depth = int(dim), int(depth)
         assert  image_height%patch_height==0 and image_width%patch_width==0
 
         num_patches = (image_height // patch_height) * (image_width // patch_width) * (image_depth // patch_depth)
-        patch_dim = channels * patch_height * patch_width * patch_depth
+        patch_dim = in_chans * patch_height * patch_width * patch_depth
         assert pool in {'cls', 'mean'}
 
         self.to_patch_embedding = nn.Sequential(
@@ -165,11 +177,11 @@ if __name__ == "__main__":
     model_vit = ViT(
         image_size = 128,
         patch_size = 16,
-        channels=1,
+        in_chans=1,
         num_classes = 4,
         dim = 1024,
         depth = 6,
-        heads = 16,
+        heads = 16,     # heads = dim / dim_head = 1024 / 64 = 16
         mlp_dim = 2048,
         dropout = 0.1,
         emb_dropout = 0.1
@@ -178,4 +190,4 @@ if __name__ == "__main__":
 
     preds = model_vit(img) 
 
-    print(preds.shape)  # (16, 1000)
+    print(preds.shape)  # (16, 4)

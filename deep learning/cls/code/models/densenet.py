@@ -40,7 +40,7 @@ class _Transition_3d(nn.Sequential):
     
 class DenseNet121_3d(nn.Module):
     """DenseNet121-BC model"""
-    def __init__(self, growth_rate=32, block_config=(6, 12, 24, 16), num_init_features=64, bn_size=4, compression_rate=0.5, drop_rate=0, num_classes=4):
+    def __init__(self, growth_rate=32, block_config=(3, 6, 12, 8), depth=4, avgpool_size=4, num_init_features=32, bn_size=4, compression_rate=0.5, drop_rate=0, num_classes=4, in_chans=2):
         """
         :param growth_rate: (int) number of filters used in DenseLayer
         :param block_config: (list of 4 ints) number of layers in each DenseBlock
@@ -51,9 +51,10 @@ class DenseNet121_3d(nn.Module):
         :param num_classes: (int) number of classes for classification
         """
         super(DenseNet121_3d, self).__init__()
+        print("training on DenseNet")
         # first Conv3d
         self.features = nn.Sequential(OrderedDict([
-            ("conv0", nn.Conv3d(2, num_init_features, kernel_size=7, stride=2, padding=3, bias=False)),
+            ("conv0", nn.Conv3d(in_chans, num_init_features, kernel_size=7, stride=2, padding=3, bias=False)),
             ("norm0", nn.BatchNorm3d(num_init_features)),
             ("relu0", nn.ReLU(inplace=True)),
             ("pool0", nn.MaxPool3d(3, stride=2, padding=1))
@@ -61,7 +62,7 @@ class DenseNet121_3d(nn.Module):
 
         # DenseBlock
         num_features = num_init_features    # 64
-        for i, num_layers in enumerate(block_config):
+        for i, num_layers in enumerate(block_config[:int(depth)]):
             block = _DenseBlock_3D(num_layers, num_features, bn_size, growth_rate, drop_rate)   # bn=4, grow=32, drop=0.5
             self.features.add_module(f"denseblock {i+1}", block)
             num_features += num_layers * growth_rate    # 6*32=192 → 96+12*32=480 → 240+24*32=1008 → 504+16*32=1016
@@ -75,7 +76,10 @@ class DenseNet121_3d(nn.Module):
         self.features.add_module("relu5", nn.ReLU(inplace=True))
 
         # classification layer
-        self.classifier = nn.Linear(num_features + 1+ 3, num_classes)
+        self.avg_size = tuple(int(avgpool_size) for _ in range(3))
+        # self.avgpool = nn.AdaptiveAvgPool3d(self.avg_size)
+        self.classifier = nn.Linear(num_features * self.avg_size[0] * self.avg_size[1] * self.avg_size[2], num_classes)
+        # self.classifier = nn.Linear(num_features, num_classes)
 
         # params initialization
         # for m in self.modules():
@@ -87,12 +91,18 @@ class DenseNet121_3d(nn.Module):
         #     elif isinstance(m, nn.Linear):
         #         nn.init.constant_(m.bias, 0)
 
-    def forward(self, x, sex, age):
+    def forward(self, x):
         features = self.features(x)
-        out = F.avg_pool3d(features, 4, stride=1).view(features.size(0), -1)
-        sex = torch.reshape(sex, (-1, 3))
-        age = torch.reshape(age, (-1, 1))
-        out = torch.cat((out, sex, age), dim=1)
+        # global avg pooling
+        # out = self.avgpool(features).view(features.size(0) * self.avg_size[0] * self.avg_size[1] * self.avg_size[2], -1)
+        features = F.adaptive_avg_pool3d(features, self.avg_size)
+        out = features.view(features.size(0), -1)
         out = self.classifier(out)
         return out
 
+if __name__ == "__main__":
+    img = torch.randn(16, 5, 128, 128, 128)
+    model = DenseNet121_3d(in_chans=5, depth=2)
+    print(model)
+    preds = model(img)
+    print(preds.shape)
