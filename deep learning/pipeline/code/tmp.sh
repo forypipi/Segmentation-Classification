@@ -1,0 +1,3 @@
+/home/orfu/anaconda3/envs/pytorch/bin/python "/data/orfu/DeepLearning/Segmentation-Classification/deep learning/cls/code/model training.py" -model_name SwinTransformer3D_PETCT
+/home/orfu/anaconda3/envs/pytorch/bin/python "/data/orfu/DeepLearning/Segmentation-Classification/deep learning/cls/code/model training.py" -model_name SwinTransformer3D_PET
+/home/orfu/anaconda3/envs/pytorch/bin/python "/data/orfu/DeepLearning/Segmentation-Classification/deep learning/cls/code/model training.py" -model_name SwinTransformer3D_CT
