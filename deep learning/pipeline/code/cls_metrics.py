@@ -1,3 +1,4 @@
+import json
 import os
 import numpy as np
 from matplotlib import pyplot as plt
@@ -5,87 +6,51 @@ from numpy import interp
 import pandas as pd
 from sklearn.metrics import accuracy_score, roc_auc_score, roc_curve, \
     auc, precision_score, recall_score, f1_score, classification_report
+from sklearn.model_selection import StratifiedKFold, train_test_split
 from sklearn.preprocessing import label_binarize
+import torch
 
+def split_train_val_test(clinical: pd.DataFrame, test_radio=0.1, kFold=3):
+    train_set, _ = train_test_split(clinical, test_size=test_radio, stratify=clinical['class'], random_state=42)
+    train_set.insert(clinical.shape[1], 'training_label', np.nan)
+    X, y = train_set['name'], train_set['class']
+    skf = StratifiedKFold(n_splits=kFold, shuffle=True, random_state=42)
+    for fold, (_, val_idx) in enumerate(skf.split(X, y)):
+        train_set.iloc[val_idx, 2] = [fold] * len(val_idx)
+    train_set = train_set.drop("class", axis=1)
+    clinical = clinical.merge(train_set, how='left', left_on='name', right_on='name')
+    clinical['training_label'].fillna(-1, inplace=True)
+    clinical['training_label'] = clinical['training_label'].astype('int')
+    clinical.to_csv("./pipeline/data/training label.csv")
+    return clinical
 
-def FitMetric(pred, true, prob, pic_name, result_path="./cls/data/output", pic_dir="./cls/pic/pic data"):
-    
-    diction = {0: 'NEGATIVE', 1: 'LYMPHOMA', 2: 'MELANOMA', 3: 'LUNG_CANCER'}
+if __name__=="__main__":
 
-    print(f"measure result:{classification_report(true, pred, digits=4)}")
+    mode = "test"
+    root = "/data/orfu/DeepLearning/Segmentation-Classification/oufu_data_400G/preprocessed"
+    diction = {'NEGATIVE': 0, 'LYMPHOMA': 1, 'MELANOMA': 2, 'LUNG_CANCER': 3}
+    diagnose = ['NEGATIVE', "LYMPHOMA", "MELANOMA", "LUNG_CANCER"]
+    kFold = 5
+
+    dfs = [pd.DataFrame({"class": [label] * len(os.listdir(os.path.join(root, label))), "name": os.listdir(os.path.join(root, label))}) for label in diagnose]
+    Whole_df = pd.concat(dfs)
+    classes = split_train_val_test(clinical=Whole_df, kFold=kFold, test_radio=0.1)
+
+    target = classes[classes['training_label'].isin([-1]) & classes['class'].isin(diagnose)]
+
+    true, pred = [], []
+    for patient in target.values:
+        patient_disease, name = patient[0], patient[1]
+
+        true.append(diction[patient_disease])
+        predict_label_txt = open(os.path.join(root, patient_disease, name, "predict_label.txt"), 'r')
+        pred.append(int(predict_label_txt.read()))
+
+    print(f"{classification_report(true, pred, digits=4)}")
     print(f"accuracy score: {np.round(accuracy_score(true, pred), 4)}")
     print(f"macro precision score: {np.round(precision_score(true, pred, average='macro'), 4)}")
     print(f"macro recall score: {np.round(recall_score(true, pred, average='macro'), 4)}")
     print(f"macro F1 score: {np.round(f1_score(true, pred, average='macro'), 4)}")
-
-    # roc_auc
-    true = label_binarize(true, classes=[0, 1, 2, 3])
-    print(f"roc_auc score: {np.round(roc_auc_score(true, prob, multi_class='ovr'), 4)}")
-
-    fpr = dict()
-    tpr = dict()
-    roc_auc = dict()
-    for i in range(4):  # 4 classes
-        fpr[i], tpr[i], _ = roc_curve(true[:, i], prob[:, i])
-        roc_auc[i] = auc(fpr[i], tpr[i])
-
-    color = ['blue', 'grey', 'r', 'violet']
-    plt.plot(np.arange(0, 1.1, 0.1), np.arange(0, 1.1, 0.1), color='black', linestyle='--')
-    for i in range(4):
-        plt.plot(fpr[i], tpr[i], color=color[i], label=f'label:{diction[i]}, auc={roc_auc[i]:0.4f}')
-
-    # micro
-    fpr["micro"], tpr["micro"], thresholds = roc_curve(true.ravel(), prob.ravel())
-    roc_auc["micro"] = auc(fpr["micro"], tpr["micro"])
-    plt.plot(fpr["micro"], tpr["micro"], color='g', label=f'micro, auc={roc_auc["micro"]:0.4f}')
-
-    # macro
-    all_fpr = np.unique(np.concatenate([fpr[i] for i in range(3)]))
-    mean_tpr = np.zeros_like(all_fpr)
-    for i in range(3):
-        mean_tpr += interp(all_fpr, fpr[i], tpr[i])
-
-    mean_tpr /= 3
-    fpr["macro"] = all_fpr
-    tpr["macro"] = mean_tpr
-    roc_auc["macro"] = auc(fpr["macro"], tpr["macro"])
-    plt.plot(fpr["macro"], tpr["macro"], color='yellow', label=f'macro, auc={roc_auc["macro"]:0.4f}')
-
-    plt.legend(loc='lower right')
-    plt.title(pic_name)
-    plt.xlim([-0.01,1.01])
-    plt.ylim([-0.01,1.01])
-    plt.ylabel('True Positive Rate')
-    plt.xlabel('False Positive Rate')
-    plt.grid(True)
-    plt.savefig(os.path.join(".", "cls", "pic", pic_name) + ".png")
-    plt.show()
-
-    for key, val in fpr.items():
-        key = diction.get(key, key)
-        with open(os.path.join(pic_dir, r"fpr_"+str(key)+".txt"), "a") as f:
-            f.write(pic_name+": "+str(val.tolist())+"\n")
-    for key, val in tpr.items():
-        key = diction.get(key, key)
-        with open(os.path.join(pic_dir, r"tpr_"+str(key)+".txt"), "a") as t:
-            t.write(pic_name+": "+str(val.tolist())+"\n")
-
-if __name__=="__main__":
-    model_name = "ViT3D_CT"
-
-    grid_search_path = os.path.join("./cls/Performance", model_name)
-    validation_df = pd.read_csv(os.path.join(grid_search_path, "grid search.csv"), index_col=0)
-    params = validation_df.loc[validation_df['accuracy'].idxmax()].to_dict()
-    params.pop('accuracy')
-    param_path = "_".join([str(item) for key_value in params.items() for item in key_value])
-    print(param_path)
-
-    test_df = pd.read_csv(os.path.join("./cls/data/output", model_name, param_path, "best", "train_result.csv"), index_col=0)
-    pred = test_df.loc[:, "pred"]
-    true = test_df.loc[:, "true"]
-    prob = test_df.loc[:, "pred prob"]
-    prob = np.array(list(map(eval, prob)))
-    FitMetric(pred, true, prob, model_name)
 
 # UNet:
 # train acc: 0.9726
@@ -204,4 +169,8 @@ if __name__=="__main__":
 # macro F1 score: 0.5585
 # roc_auc score: 0.8501
 
-
+# pipeline
+# accuracy score: 0.6429
+# macro precision score: 0.6516
+# macro recall score: 0.6389
+# macro F1 score: 0.6362

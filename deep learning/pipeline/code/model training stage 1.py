@@ -37,7 +37,7 @@ import nnunetv2
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-cls_model_name', type=str, default="ResNet3D_PETCT", help='A REQUIRED PARAMETER! input "model name"+"_"+"modality", like ResNet3D_PETCT')
-    parser.add_argument('-seg_model_name', type=str, default="nnUNet3D_PETCT", help='A REQUIRED PARAMETER! input "model name"+"_"+"modality", like VNet3D_PETCT')
+    parser.add_argument('-seg_model_name', type=str, default="VNet3D_PETCT", help='A REQUIRED PARAMETER! input "model name"+"_"+"modality", like VNet3D_PETCT')
     parser.add_argument('-train_best', type=bool, default=True, help='A parameter for grid search or directly train best model according to the grid search result in "Performance" folder.')
     args = parser.parse_args()
     return args
@@ -91,12 +91,12 @@ def training(
         seg_train_loader: DataLoader,
         seg_test_loader: DataLoader,
         writer: dict,
-        model_name="ResNet3D_nnUNet3D",
+        model_name="ResNet3D_VNet3D",
         EPOCHS=50,
         cls_threshold=0.1,
         seg_threshold=0.,
         cls_model_name="ResNet3D",
-        seg_model_name="nnUNet3D",
+        seg_model_name="VNet3D",
         tag="val0",
         device="cuda"
         ):
@@ -149,7 +149,7 @@ def training(
             if max_acc < accuracy:
                 max_acc = accuracy
                 early_stop = epoch
-                torch.save(cls_model, os.path.join('/data/orfu/DeepLearning/Segmentation-Classification/deep learning/pipeline/model/cls', f"{cls_model_name}_{tag}_best.pt"))
+                torch.save(cls_model, os.path.join('/data/orfu/DeepLearning/Segmentation-Classification/deep learning/pipeline/model/stage1/pipeline/cls', f"{cls_model_name}_{tag}_best.pt"))
     
 
             # segmentation
@@ -197,7 +197,7 @@ def training(
             if max_dice < dice:
                 max_dice = dice
                 early_stop = epoch
-                torch.save(seg_model, os.path.join('/data/orfu/DeepLearning/Segmentation-Classification/deep learning/pipeline/model/seg', f"{seg_model_name}_{tag}_best.pt"))
+                torch.save(seg_model, os.path.join('/data/orfu/DeepLearning/Segmentation-Classification/deep learning/pipeline/model/stage1/pipeline/seg', f"{seg_model_name}_{tag}_best.pt"))
             
     return early_stop, cls_model, seg_model, cls_train_loss, seg_train_loss, max_acc, max_dice
 
@@ -218,26 +218,27 @@ def cls_val(model,
         loop.set_description(tqdm_description)
         pred_result, true_result, pred_prob = torch.as_tensor([], device=device), torch.as_tensor([], device=device), torch.as_tensor([], device=device)
         for data in loop:
+
             images, labels, paths = data
+
+
+            cam = CAM(model, input_shape=(3, 128, 128, 128), target_layer='layer2', fc_layer='fc')
+            # Retrieve the CAM by passing the class index and the model output
             classification = model(images)
+            activation_map = cam(labels.tolist(), classification)
+            activation_map = F.interpolate(activation_map[0].unsqueeze(dim=1), scale_factor=(8, 8, 8), mode="trilinear")
+            
             clsloss = cls_loss(classification, labels)
-            classification = nn.Softmax(dim=1)(classification)
-            pred_result = torch.concat((pred_result, torch.argmax(classification, dim=1)))
-            pred_prob = torch.concat((pred_prob, classification))
+            classification_softmax = nn.Softmax(dim=1)(classification)
+            pred_result = torch.concat((pred_result, torch.argmax(classification_softmax, dim=1)))
+            pred_prob = torch.concat((pred_prob, classification_softmax))
             true_result = torch.concat((true_result, labels))
             total_loss += clsloss
 
-            if save:
-                cam = CAM(model, input_shape=(3, 128, 128, 128), target_layer='layer2', fc_layer='fc')
-                out = model(images)
-                # Retrieve the CAM by passing the class index and the model output
-                activation_map = cam(out.argmax(dim=1).tolist(), out)
-                activation_map = F.interpolate(activation_map[0].unsqueeze(dim=1), scale_factor=(8, 8, 8), mode="trilinear")
-
-                for cam, path in zip(activation_map, paths):
-                    if not os.path.exists(path):
-                        os.makedirs(path)
-                    torch.save(cam, os.path.join(path, 'cam.pt'))
+            for cam, path in zip(activation_map, paths):
+                if not os.path.exists(os.path.join(path, 'cam')):
+                    os.makedirs(os.path.join(path, 'cam'))
+                torch.save(cam, os.path.join(path, 'cam', 'stage1_cam.pt'))
 
         pred_result = list(map(int, pred_result.cpu()))
         pred_prob = pred_prob.cpu().tolist()
@@ -274,7 +275,7 @@ def seg_val(
         data_loader: DataLoader, 
         seg_loss, 
         tqdm_description, 
-        model_name="ResNet3D_nnUNet3D", 
+        model_name="ResNet3D_VNet3D", 
         writer=None, 
         epoch=50, 
         device="cuda", 
@@ -306,12 +307,12 @@ def seg_val(
                     seg = torch.squeeze(seg)
                     if not os.path.exists(path):
                         os.makedirs(path)
-                    torch.save(seg, os.path.join(path, 'predict_mask_pt', model_name + '_01_mask.pt'))
+                    torch.save(seg, os.path.join(path, 'predict_mask_pt', model_name + '_stage1_01_mask.pt'))
                 for seg, path in zip(segmentation, paths):
                     seg = torch.squeeze(seg)
                     if not os.path.exists(path):
                         os.makedirs(path)
-                    torch.save(seg, os.path.join(path, 'predict_mask_pt', model_name + '_sigmoid_mask.pt'))
+                    torch.save(seg, os.path.join(path, 'predict_mask_pt', model_name + '_stage1_sigmoid_mask.pt'))
             total_loss += segloss
 
         if writer != None:
@@ -357,40 +358,43 @@ def get_models(
     if modality not in ["PET", "CT", "PETCT"]:
         raise Exception(f"Wrong input: modality={modality}, must be one of 'PETCT'/'CT'/'PET'")
 
-    cls_model = torch.load(f"/data/orfu/DeepLearning/Segmentation-Classification/deep learning/pipeline/model/pretrain/cls/{cls_model}_{modality}.pt").to(device)
-    _, _, _, _, seg_model, _ = load_what_we_need(
-        model_training_output_dir=f"/data/orfu/DeepLearning/Segmentation-Classification/deep learning/pipeline/model/pretrain/seg/{seg_model}",
-        checkpoint_name=f"{seg_model}.pth",
-        device=device,
-    )
+    root = f"/data/orfu/DeepLearning/Segmentation-Classification/deep learning/pipeline/model/stage1/pretrain"
+    cls_model = torch.load(os.path.join(root, "cls", f"{cls_model}_{modality}.pt")).to(device)
+    
+    # for nnUNet
+    # _, _, _, _, seg_model, _ = load_what_we_need(
+    #     model_training_output_dir=f"/data/orfu/DeepLearning/Segmentation-Classification/deep learning/pipeline/model/pretrain/seg/{seg_model}",
+    #     checkpoint_name=f"{seg_model}.pth",
+    #     device=device,
+    # )
+
+    # for VNet
+    seg_model = torch.load(os.path.join(root, "seg", f"{seg_model}_{modality}.pt")).to(device)
 
     if modality == "PETCT":
         # cls_model.avgpool = nn.AdaptiveAvgPool3d((1, 1, 1))
         # cls_model.fc = nn.Linear(64, 4, device=device)
         cls_model.conv1 = nn.Sequential(
-            nn.Conv3d(in_channels=3, out_channels=2, kernel_size=3, stride=1, padding=1, bias=False, device=device), 
+            nn.Conv3d(in_channels=3, out_channels=2, kernel_size=1, stride=1, padding=0, bias=False, device=device), 
             cls_model.conv1,
             )
 
-        # seg_model.in_tr.conv = nn.Conv3d(in_channels=3, out_channels=16, kernel_size=3, stride=1, padding=1, bias=False, device=device)
-        seg_model.encoder.stages[0][0].convs[0].conv = nn.Sequential(
-            nn.Conv3d(3, 2, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1), device=device),
-            seg_model.encoder.stages[0][0].convs[0].conv,
-            )
-        seg_model.encoder.stages[0][0].convs[0].all_modules[0] = nn.Sequential(
-            nn.Conv3d(3, 2, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1), device=device),
-            seg_model.encoder.stages[0][0].convs[0].all_modules[0],
-            )
-        # seg_model.decoder.seg_layers = nn.ModuleList(
-        #     [
-        #         nn.Conv3d(320, 1, kernel_size=(1, 1, 1), stride=(1, 1, 1), device=device),
-        #         nn.Conv3d(256, 1, kernel_size=(1, 1, 1), stride=(1, 1, 1), device=device),
-        #         nn.Conv3d(128, 1, kernel_size=(1, 1, 1), stride=(1, 1, 1), device=device),
-        #         nn.Conv3d(64, 1, kernel_size=(1, 1, 1), stride=(1, 1, 1), device=device),
-        #         nn.Conv3d(32, 1, kernel_size=(1, 1, 1), stride=(1, 1, 1), device=device),
-        #     ]
-        # )
+        # for nnUNet
+        # seg_model.encoder.stages[0][0].convs[0].conv = nn.Sequential(
+        #     nn.Conv3d(3, 2, kernel_size=1, stride=1, padding=0, device=device),
+        #     seg_model.encoder.stages[0][0].convs[0].conv,
+        #     )
+        # seg_model.encoder.stages[0][0].convs[0].all_modules[0] = nn.Sequential(
+        #     nn.Conv3d(3, 2, kernel_size=1, stride=1, padding=0, device=device),
+        #     seg_model.encoder.stages[0][0].convs[0].all_modules[0],
+        #     )
 
+        # for VNet
+        seg_model.in_tr = nn.Sequential(
+            nn.Conv3d(in_channels=3, out_channels=2, kernel_size=1, stride=1, padding=0, bias=False, device=device), 
+            seg_model.in_tr,
+            )
+        
     return cls_model, seg_model
 
 class MyData(Dataset):
@@ -398,7 +402,7 @@ class MyData(Dataset):
                  data_label: pd.DataFrame, 
                  label_list: list,
                  mode,
-                 model_name="ResNet3D_nnUNet3D",
+                 model_name="ResNet3D_VNet3D",
                  device='cuda', 
                  modality="PETCT", 
                  root_dir=r'/data/orfu/DeepLearning/Segmentation-Classification/oufu_data_400G/preprocessed'
@@ -469,13 +473,13 @@ class MyData(Dataset):
                 if  len(mask.shape) == 3:
                     mask = mask.unsqueeze(dim=0)
             else:
-                mask = torch.full((1, 128, 128, 128), fill_value=0.5, dtype=torch.float32, device=self.device)
+                mask = torch.full((1, 128, 128, 128), fill_value=0., dtype=torch.float32, device=self.device)
             image = torch.cat([image, mask], dim=0)
 
             return image, label, patient_dir
         
         else:
-            cam_path = os.path.join(patient_dir, 'cam.pt')
+            cam_path = os.path.join(patient_dir, 'cam', 'stage1.pt')
             if os.path.exists(cam_path):
                 cam = torch.load(cam_path, map_location=torch.device(self.device))
             else:
@@ -550,7 +554,7 @@ def main():
 
     train_for_best = args.train_best
     if not train_for_best:
-        grid_search_path = os.path.join("./pipeline/Performance", f"{cls_model_name}_{seg_model_name}_{modality}")
+        grid_search_path = os.path.join("./pipeline/Performance/stage1", f"{cls_model_name}_{seg_model_name}_{modality}")
 
         if os.path.exists(os.path.join(grid_search_path, "grid search.csv")):
             validation_df = pd.read_csv(os.path.join(grid_search_path, "grid search.csv"), index_col=0)
@@ -635,8 +639,7 @@ def main():
 
     # retrain for best
     try:
-        grid_search_path = os.path.join("./pipeline/Performance", f"{cls_model_name}_{seg_model_name}_{modality}")
-        validation_df = pd.read_csv(os.path.join(grid_search_path, "grid search.csv"), index_col=0)
+        validation_df = pd.read_csv(os.path.join(f"./pipeline/Performance/stage1/{cls_model_name}_{seg_model_name}_{modality}", "grid search.csv"), index_col=0)
 
         print(validation_df)
         params = validation_df.loc[validation_df['dice'].idxmax()].to_dict()
@@ -650,9 +653,9 @@ def main():
     print(f"best param: {params}")
     param_path = "_".join([str(item) for key_value in params.items() for item in key_value])
     paths = [
-        os.path.join('./pipeline/log/train', f"{cls_model_name}_{seg_model_name}_{modality}", param_path, "best"),
-        os.path.join('./pipeline/log/test', f"{cls_model_name}_{seg_model_name}_{modality}", param_path, "best"),
-        os.path.join("./pipeline/Performance", f"{cls_model_name}_{seg_model_name}_{modality}", param_path, "best"),
+        os.path.join('./pipeline/log/stage1/train', f"{cls_model_name}_{seg_model_name}_{modality}", param_path, "best"),
+        os.path.join('./pipeline/log/stage1/test', f"{cls_model_name}_{seg_model_name}_{modality}", param_path, "best"),
+        os.path.join("./pipeline/Performance/stage1/", f"{cls_model_name}_{seg_model_name}_{modality}", param_path, "best"),
         os.path.join("./pipeline/data/output", f"{cls_model_name}_{seg_model_name}_{modality}", param_path, "best")
     ]
     for dir in paths:
@@ -676,7 +679,7 @@ def main():
     cls_optimizer = optim.AdamW(cls_model.parameters(), lr=params['cls_lr'], weight_decay=params['cls_WeightDecay'])    # L2 loss
     seg_optimizer = optim.AdamW(seg_model.parameters(), lr=params['seg_lr'], weight_decay=params['seg_WeightDecay'])
 
-    _, cls_model, seg_model, _, max_acc, max_dice = training(
+    _, cls_model, seg_model, _, _, max_acc, max_dice = training(
             cls_model, 
             seg_model, 
             cls_optimizer, 

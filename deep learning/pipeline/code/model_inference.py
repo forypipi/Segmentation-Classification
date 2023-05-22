@@ -37,7 +37,7 @@ import nnunetv2
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-cls_model_name', type=str, default="ResNet3D_PETCT", help='A REQUIRED PARAMETER! input "model name"+"_"+"modality", like ResNet3D_PETCT')
-    parser.add_argument('-seg_model_name', type=str, default="nnUNet3D_PETCT", help='A REQUIRED PARAMETER! input "model name"+"_"+"modality", like VNet3D_PETCT')
+    parser.add_argument('-seg_model_name', type=str, default="VNet3D_PETCT", help='A REQUIRED PARAMETER! input "model name"+"_"+"modality", like VNet3D_PETCT')
     parser.add_argument('-train_best', type=bool, default=False, help='A parameter for grid search or directly train best model according to the grid search result in "Performance" folder.')
     args = parser.parse_args()
     return args
@@ -53,7 +53,7 @@ def split_train_val_test(clinical: pd.DataFrame, test_radio=0.1, kFold=3):
     clinical = clinical.merge(train_set, how='left', left_on='name', right_on='name')
     clinical['training_label'].fillna(-1, inplace=True)
     clinical['training_label'] = clinical['training_label'].astype('int')
-    clinical.to_csv("./cls/data/training label.csv")
+    clinical.to_csv("./pipeline/data/training label.csv")
     return clinical
 
 def acc(pred, true, writer: SummaryWriter, epoch):
@@ -83,14 +83,14 @@ def val(
         writer,
         cls_info: dict,
         seg_info: dict,
-        model_name="ResNet3D_nnUNet3D",
+        model_name="ResNet3D_VNet3D",
         EPOCHS=50,
         tag="val0",
         device="cuda",
+        using_checkpoint=False
         ):
-    cls_model, seg_model = cls_info['model'], seg_info['model']
-    cls_model.eval()
-    seg_model.eval()
+    cls_model_name, seg_model_name = cls_info['model'], seg_info['model']
+
     with torch.no_grad():
         early_stop, max_dice = 0, 0
 
@@ -100,6 +100,17 @@ def val(
         cls_loss = cls_info['cls_loss']
 
         for epoch in range(int(EPOCHS)):
+
+            if using_checkpoint:
+                # if epoch % 5 == 0:
+                    # cls_model, seg_model = get_models(cls_model=cls_model_name, seg_model=seg_model_name, best=False, epoch=epoch, device=device)
+                cls_model, seg_model = get_models(cls_model=cls_model_name, seg_model=seg_model_name, best=False, epoch=epoch, device=device)
+            else:
+                # if not use checkpoint: 
+                cls_model, seg_model = get_models(cls_model=cls_model_name, seg_model=seg_model_name, best=True, epoch="val0", device=device)
+
+            cls_model.eval()
+            seg_model.eval()
             
             # classification
             if hasattr(torch.cuda, 'empty_cache'):
@@ -171,25 +182,23 @@ def cls_val(model,
         pred_result, true_result, pred_prob = torch.as_tensor([], device=device), torch.as_tensor([], device=device), torch.as_tensor([], device=device)
         for data in loop:
             images, labels, paths = data
-            
 
             cam = CAM(model, input_shape=(3, 128, 128, 128), target_layer='layer2', fc_layer='fc')
             # Retrieve the CAM by passing the class index and the model output
             classification = model(images)
+            clsloss = cls_loss(classification, labels)
             activation_map = cam(classification.argmax(dim=1).tolist(), classification)
+
             activation_map = F.interpolate(activation_map[0].unsqueeze(dim=1), scale_factor=(8, 8, 8), mode="trilinear")
 
-            clsloss = cls_loss(classification, labels)
             classification_softmax = nn.Softmax(dim=1)(classification)
-
-            print(torch.argmax(classification_softmax, dim=1), labels)
-
             pred_result = torch.concat((pred_result, torch.argmax(classification_softmax, dim=1)))
             pred_prob = torch.concat((pred_prob, classification_softmax))
             true_result = torch.concat((true_result, labels))
             total_loss += clsloss
 
             for cam, path in zip(activation_map, paths):
+                path = os.path.join(path, 'cam')
                 if not os.path.exists(path):
                     os.makedirs(path)
                 torch.save(cam, os.path.join(path, 'inference_cam.pt'))
@@ -234,7 +243,7 @@ def seg_val(
         data_loader: DataLoader, 
         seg_loss, 
         tqdm_description, 
-        model_name="ResNet3D_nnUNet3D", 
+        model_name="ResNet3D_VNet3D", 
         writer=None, 
         epoch=50, 
         device="cuda", 
@@ -264,15 +273,15 @@ def seg_val(
                 segmentation_01 = segmentation.ge(0.5)
                 for seg, path in zip(segmentation_01, paths):
                     seg = torch.squeeze(seg)
-                    if not os.path.exists(path):
-                        os.makedirs(path)
+                    if not os.path.exists(os.path.join(path, 'predict_mask_pt')):
+                        os.makedirs(os.path.join(path, 'predict_mask_pt'))
                     if os.path.exists(os.path.join(path, 'predict_mask_pt')):
                         torch.save(seg, os.path.join(path, 'predict_mask_pt', model_name + '_inference_01_mask.pt'))
 
                 for seg, path in zip(segmentation, paths):
                     seg = torch.squeeze(seg)
-                    if not os.path.exists(path):
-                        os.makedirs(path)
+                    if not os.path.exists(os.path.join(path, 'predict_mask_pt')):
+                        os.makedirs(os.path.join(path, 'predict_mask_pt'))
                     if os.path.exists(os.path.join(path, 'predict_mask_pt')):
                         torch.save(seg, os.path.join(path, 'predict_mask_pt', model_name + '_inference_sigmoid_mask.pt'))
 
@@ -287,11 +296,17 @@ def seg_val(
 def get_models(
         cls_model,
         seg_model,
-        tag='val0',
+        best=True,
+        epoch='val0',
         device="cuda",
 ):
-    cls_model = torch.load(f"/data/orfu/DeepLearning/Segmentation-Classification/deep learning/pipeline/model/stage2/pipeline/cls/{cls_model}_{tag}_best.pt").to(device)
-    seg_model = torch.load(f"/data/orfu/DeepLearning/Segmentation-Classification/deep learning/pipeline/model/stage2/pipeline/seg/{seg_model}_{tag}_best.pt").to(device)
+    # seg_model = "VNet3D"
+    if best:
+        cls_model = torch.load(f"/data/orfu/DeepLearning/Segmentation-Classification/deep learning/pipeline/model/stage2/pipeline/cls/{cls_model}_{epoch}_best.pt").to(device)
+        seg_model = torch.load(f"/data/orfu/DeepLearning/Segmentation-Classification/deep learning/pipeline/model/stage2/pipeline/seg/{seg_model}_{epoch}_best.pt").to(device)
+    else:
+        cls_model = torch.load(f"/data/orfu/DeepLearning/Segmentation-Classification/deep learning/pipeline/model/stage2/pipeline/checkpoint/cls/{cls_model}_{epoch}_01.pt").to(device)
+        seg_model = torch.load(f"/data/orfu/DeepLearning/Segmentation-Classification/deep learning/pipeline/model/stage2/pipeline/checkpoint/seg/{seg_model}_{epoch}_01.pt").to(device)
 
     return cls_model, seg_model
 
@@ -301,7 +316,7 @@ class MyData(Dataset):
                  label_list: list,
                  mode,
                  first_epoch=True,
-                 model_name="ResNet3D_nnUNet3D",
+                 model_name="ResNet3D_VNet3D",
                  device='cuda', 
                  modality="PETCT", 
                  root_dir=r'/data/orfu/DeepLearning/Segmentation-Classification/oufu_data_400G/preprocessed'
@@ -313,11 +328,11 @@ class MyData(Dataset):
             raise Exception(f"Wrong input: mode={mode}, must be one of 'cls'/'seg'")
         self.mode = mode
 
-        # if self.mode == 'cls':
-        #     mode_list = ['NEGATIVE', 'LYMPHOMA', 'MELANOMA', 'LUNG_CANCER']
-        # else:
-        #     mode_list = ['LYMPHOMA', 'MELANOMA', 'LUNG_CANCER']
-        mode_list = ['NEGATIVE', 'LYMPHOMA', 'MELANOMA', 'LUNG_CANCER']
+        if self.mode == 'cls':
+            mode_list = ['NEGATIVE', 'LYMPHOMA', 'MELANOMA', 'LUNG_CANCER']
+        else:
+            mode_list = ['LYMPHOMA', 'MELANOMA', 'LUNG_CANCER']
+        # mode_list = ['NEGATIVE', 'LYMPHOMA', 'MELANOMA', 'LUNG_CANCER']
 
         self.data = data_label[data_label['training_label'].isin(label_list) & data_label['class'].isin(mode_list)]
         # if self.mode == 'seg':
@@ -334,7 +349,7 @@ class MyData(Dataset):
        
 
     def __getitem__(self, item):
-        # sex_dict = {'F': 0, 'M': 1}
+
         label_dict = {'NEGATIVE': 0, 'LYMPHOMA': 1, 'MELANOMA': 2, 'LUNG_CANCER': 3}
         patient_id = self.data.iloc[item, 1]
         diagnose = self.data.iloc[item, 0]
@@ -379,13 +394,13 @@ class MyData(Dataset):
                 if  len(mask.shape) == 3:
                     mask = mask.unsqueeze(dim=0)
             else:
-                mask = torch.full((1, 128, 128, 128), fill_value=0.5, dtype=torch.float32, device=self.device)
+                mask = torch.full((1, 128, 128, 128), fill_value=0., dtype=torch.float32, device=self.device)
             image = torch.cat([image, mask], dim=0)
 
             return image, label, patient_dir
         
         else:
-            cam_path = os.path.join(patient_dir, 'inference_cam.pt')
+            cam_path = os.path.join(patient_dir, 'cam', 'inference_cam.pt')
             if os.path.exists(cam_path):
                 cam = torch.load(cam_path, map_location=torch.device(self.device))
             else:
@@ -445,7 +460,9 @@ def main():
 
     cls_batch = 4
     seg_batch = 2
-    epoch = 10
+    epoch = 75
+    using_checkpoint = True
+
     cls_loss = nn.CrossEntropyLoss().to(device)
     seg_loss = loss.HybridLoss()
 
@@ -461,10 +478,8 @@ def main():
     val_writer = SummaryWriter(paths[0])
     test_writer = SummaryWriter(paths[1])
 
-    cls_model, seg_model = get_models(cls_model=cls_model_name, seg_model=seg_model_name, device=device)
-
     seg_info = {
-        'model': seg_model,
+        'model': seg_model_name,
         'classes': classes, 
         'root_dir': root_dir,
         'seg_loss': seg_loss,
@@ -475,7 +490,7 @@ def main():
         'seg_mode': 0,
     }
     cls_info = {
-        'model': cls_model,
+        'model': cls_model_name,
         'classes': classes, 
         'root_dir': root_dir,
         'cls_loss': cls_loss,
@@ -492,7 +507,9 @@ def main():
             seg_info=seg_info,
             EPOCHS=epoch, 
             device=device,
+            using_checkpoint=using_checkpoint,
         )
+    
 
     cls_info['cls_mode'] = -1
     seg_info['seg_mode'] = -1
@@ -500,8 +517,9 @@ def main():
             writer=test_writer, 
             cls_info=cls_info,
             seg_info=seg_info,
-            EPOCHS=early_stop+1, 
+            EPOCHS=early_stop+1,
             device=device,
+            using_checkpoint=using_checkpoint,
         )
     
     print("-"*20)
