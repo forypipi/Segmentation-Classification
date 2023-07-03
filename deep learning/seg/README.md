@@ -12,3 +12,10 @@ Modify /home/orfu/anaconda3/envs/pytorch/lib/python3.7/site-packages/hiddenlayer
 
 2023.7.3 14:43
 Modify /home/orfu/anaconda3/envs/pytorch/lib/python3.10/site-packages/hiddenlayer/pytorch_builder.py, Modify "torch_graph = torch.onnx._optimize_trace(trace, torch.onnx.OperatorExportTypes.ONNX)" in line 71 to "torch_graph = torch.onnx._optimize_graph(trace, torch.onnx.OperatorExportTypes.ONNX)"
+Modify /home/orfu/anaconda3/envs/pytorch/lib/python3.10/site-packages/hiddenlayer/pytorch_builder.py, Modify "params = {k: torch_node[k] for k in torch_node.attributeNames()}" in line 83 to 
+"
+try:
+  params = {k: torch_node[k] for k in torch_node.attributeNames()}
+except Exception: 
+  params = {}
+"
