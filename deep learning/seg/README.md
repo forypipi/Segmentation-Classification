@@ -19,3 +19,11 @@ try:
 except Exception: 
   params = {}
 "
+
+2023.7.5 17:26  (using AdamW instead of SGD)
+Modify /home/orfu/nnUNet/nnunetv2/training/nnUNetTrainer/nnUNetTrainer.py, Modify "optimizer = torch.optim.SGD(self.network.parameters(), self.initial_lr, weight_decay=self.weight_decay, momentum=0.99, nesterov=True)" in line 462 to "optimizer = torch.optim.AdamW(self.network.parameters(), self.initial_lr, weight_decay=self.weight_decay)"
+
+Modify /home/orfu/nnUNet/nnunetv2/training/nnUNetTrainer/nnUNetTrainer.py, Modify "optimizer = torch.optim.SGD(self.network.parameters(), self.initial_lr, weight_decay=self.weight_decay, momentum=0.99, nesterov=True)" in line 462 to "optimizer = torch.optim.AdamW(self.network.parameters(), self.initial_lr, weight_decay=self.weight_decay)"
+
+Modify /home/orfu/nnUNet/nnunetv2/training/nnUNetTrainer/nnUNetTrainer.py, Modify "self.initial_lr = 1e-2" in line 140 to "self.initial_lr = 3e-4"
+Modify /home/orfu/nnUNet/nnunetv2/training/nnUNetTrainer/nnUNetTrainer.py, Modify "self.num_epochs = 1000" in line 146 to "self.num_epochs = 500"
